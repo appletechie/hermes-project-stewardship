@@ -6,6 +6,20 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Structured objective evidence.** A command objective may end its stdout
+  with one JSON line, `{"measure": 2, "items": [{"id": ..., "label": ...,
+  "detail": ...}]}`, instead of a bare number: `measure` is the measure and
+  `items` names what failed. Items are kept in the cycle's health snapshot (no
+  schema change) and read back with the new `steward_objective_items` tool,
+  `stewardctl objective items` and
+  `GET /stewardship/v1/projects/{project}/objective-items`. A bare number
+  works as before. Evidence is untrusted: a malformed, oversized or
+  wrong-typed line is an unknown measure with a fixed reason
+  (`invalid_evidence=...`), never an exception, and at most 50 items of
+  three stripped strings of 300 characters are kept. See
+  `docs/objective-evidence.md`.
+
 ### Fixed
 - **Agent tools answer refusals instead of failing.** `steward_run_cycle`,
   `steward_status` and `steward_propose_initiative` return
