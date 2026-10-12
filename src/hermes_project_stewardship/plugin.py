@@ -117,12 +117,17 @@ def tool_steward_propose_initiative(
     )
 
 
+def tool_steward_objective_items(project_id: str, objective: Optional[str] = None) -> dict:
+    return PluginState.services().objective_items(project_id, objective)
+
+
 # Approval/rejection are intentionally not model tools. They remain on authenticated
 # RPC/dashboard and permission-bound gateway surfaces.
 TOOLS = {
     "steward_status": tool_steward_status,
     "steward_run_cycle": tool_steward_run_cycle,
     "steward_propose_initiative": tool_steward_propose_initiative,
+    "steward_objective_items": tool_steward_objective_items,
 }
 
 _TOOL_PROPERTIES = {
@@ -141,11 +146,16 @@ _TOOL_PROPERTIES = {
         "risk": {"type": "string", "enum": ["low", "medium", "high"]},
         "dedupe_key": {"type": "string"},
     },
+    "steward_objective_items": {
+        "project_id": {"type": "string", "description": "Stewardship project id"},
+        "objective": {"type": "string", "description": "Objective name; omit for every objective"},
+    },
 }
 _TOOL_REQUIRED = {
     "steward_status": ["project_id"],
     "steward_run_cycle": ["project_id"],
     "steward_propose_initiative": ["project_id", "title", "rationale"],
+    "steward_objective_items": ["project_id"],
 }
 
 

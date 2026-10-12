@@ -156,6 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
     ol = osub.add_parser("list")
     ol.add_argument("project_id")
     ol.add_argument("--json", action="store_true")
+    oi = osub.add_parser("items", help="latest evidence items per objective")
+    oi.add_argument("project_id")
+    oi.add_argument("--name", default=None, help="one objective; default every objective")
+    oi.add_argument("--json", action="store_true")
 
     # Batch L: the delivery ladder (v42). `place` sets the single parent of an
     # item at one level; `unplaced` lists what the 0.4.0 upgrade could not place
@@ -680,6 +684,17 @@ def _dispatch(args, svc: StewardshipService, engine: CycleEngine, store: Store) 
             else:
                 for o in objs:
                     print(f"- {o.name} [{o.evaluator_type}] target={o.target} severity={o.severity}")
+            return EXIT_OK
+        if args.action == "items":
+            report = svc.objective_items(args.project_id, args.name)
+            if args.json:
+                print(json.dumps(report))
+            else:
+                for o in report["objectives"]:
+                    print(f"- {o['name']} [{o['state']}] measured={o['measured']} target={o['target']}"
+                          f" at {o['recorded_at'] or 'never'}")
+                    for item in o["items"] or []:
+                        print(f"    {item.get('id', '')}: {item.get('label', '')} {item.get('detail', '')}".rstrip())
             return EXIT_OK
 
     if g == "health":

@@ -12,6 +12,18 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   existing board and never provisions one: a missing board is a 422
   `board_not_found` ("onboarding binds existing boards only"), an archived
   board or one another project owns is a 409, all before anything is written.
+- **Structured objective evidence.** A command objective may end its stdout
+  with one JSON line, `{"measure": 2, "items": [{"id": ..., "label": ...,
+  "detail": ...}]}`, instead of a bare number: `measure` is the measure and
+  `items` names what failed. Items are kept in the cycle's health snapshot (no
+  schema change) and read back with the new `steward_objective_items` tool,
+  `stewardctl objective items` and
+  `GET /stewardship/v1/projects/{project}/objective-items`. A bare number
+  works as before. Evidence is untrusted: a malformed, oversized or
+  wrong-typed line is an unknown measure with a fixed reason
+  (`invalid_evidence=...`), never an exception, and at most 50 items of
+  three stripped strings of 300 characters are kept. See
+  `docs/objective-evidence.md`.
 
 ## [0.5.1] - 2026-10-12
 

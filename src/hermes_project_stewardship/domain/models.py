@@ -88,6 +88,9 @@ class ObjectiveResult:
     measured: Optional[float]
     target_met: bool
     detail: str
+    # Failing items a command objective named in its JSON evidence line; None
+    # when it printed a bare number or nothing.
+    items: Optional[List[Dict[str, str]]] = None
 
     @property
     def state(self) -> str:
