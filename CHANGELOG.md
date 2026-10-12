@@ -70,6 +70,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   flood records `output_too_large` with an unknown measure, like a timeout;
   other objectives in the cycle still run.
 
+
+- **Objective descriptions from the CLI.** `stewardctl objective add
+  --description` sets an objective's description, and the new `stewardctl
+  objective update --name <objective>` changes its description, target,
+  severity or command. The API and Desktop already could.
+
 ## [0.4.0] - 2026-10-11
 
 The Project Stewardship Desktop app becomes the main surface, and every part
