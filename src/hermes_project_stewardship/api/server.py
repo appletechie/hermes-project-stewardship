@@ -650,6 +650,9 @@ class OnboardingRequest(BaseModel):
     actor_id: str = "stewardship-api"
     expected_membership_revision: Optional[int] = None
     preflight_token: Optional[str] = None
+    # False binds an existing board only, never provisions one. The server
+    # forces it with STEWARD_ONBOARD_BIND_ONLY=1.
+    create_board: bool = True
 
 
 class WorkflowDefine(BaseModel):
@@ -3203,6 +3206,8 @@ def create_app(
             "board_slug": (body.board_slug or body.slug or body.project_id).strip(),
             "autonomy_level": min(max(body.autonomy_level, 0), 3),
         }
+        if not body.create_board:  # absent by default, so older fingerprints still match
+            payload["create_board"] = False
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(encoded.encode()).hexdigest()
 
@@ -3263,6 +3268,37 @@ def create_app(
                     "message": "canonical project and Kanban host is unavailable",
                 },
             ) from None
+
+    onboarding_bind_only = os.environ.get("STEWARD_ONBOARD_BIND_ONLY", "").strip().lower() in {
+        "1", "true", "yes"}
+
+    def _require_existing_board(board_slug: str, slug: str, existing: dict) -> None:
+        """Bind-only onboarding: the board must exist, be live and be free or already ours."""
+        try:
+            board = adapter.get_board(board_slug)
+        except NotImplementedError:
+            raise HTTPException(503, {
+                "code": "host_unavailable",
+                "message": "The Kanban host cannot look up boards, so onboarding cannot bind an existing one",
+            }) from None
+        except KanbanAdapterError as exc:
+            if exc.code != "board_not_found":
+                _raise_work_error(exc)
+            raise HTTPException(422, {
+                "code": "board_not_found",
+                "message": f"Board '{board_slug}' does not exist; onboarding binds existing boards only",
+                "fields": {"board_slug": ["Choose an existing board"]},
+            }) from None
+        if board.get("archived"):
+            raise HTTPException(409, {"code": "board_archived",
+                                      "message": f"Board '{board_slug}' is archived"})
+        native = next((str(p.get("id")) for p in existing.get("projects", [])
+                       if p.get("slug") == slug), None)
+        if str(board.get("project_id") or "") not in ("", native):
+            raise HTTPException(409, {
+                "code": "board_bound_elsewhere",
+                "message": f"Board '{board_slug}' is already bound to another project",
+            })
 
     @router.post("/onboard/preflight")
     def onboard_preflight(body: OnboardingRequest):
@@ -3327,6 +3363,8 @@ def create_app(
                 503,
                 {"code": "host_unavailable", "message": "canonical project and Kanban host is unavailable"},
             ) from None
+        if onboarding_bind_only or not body.create_board:
+            _require_existing_board(validated["board_slug"], slug, existing)
         mode = ("connect_existing"
                 if any(p["slug"] == slug for p in existing.get("projects", []))
                 else "create_new")

@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Bind-only onboarding.** `POST /onboard` with `create_board: false`, or any
+  onboarding when the server runs with `STEWARD_ONBOARD_BIND_ONLY=1`, binds an
+  existing board and never provisions one: a missing board is a 422
+  `board_not_found` ("onboarding binds existing boards only"), an archived
+  board or one another project owns is a 409, all before anything is written.
+
 ## [0.5.1] - 2026-10-12
 
 ### Added

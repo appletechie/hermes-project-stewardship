@@ -73,6 +73,10 @@ class KanbanAdapter(ABC):
     def list_existing_projects(self) -> Dict[str, Any]:
         raise NotImplementedError("project discovery is not supported")
 
+    def get_board(self, slug: str) -> Dict[str, Any]:
+        """The host's metadata for an existing board (``project_id``, ``archived``)."""
+        raise NotImplementedError("board lookup is not supported")
+
     def validate_project(self, **payload: Any) -> Dict[str, Any]:
         raise NotImplementedError("project validation is not supported")
 
@@ -142,6 +146,17 @@ class ReferenceKanbanAdapter(KanbanAdapter):
                 (project_id,),
             ).fetchone()
         return str(row["slug"]) if row else None
+
+    def get_board(self, slug: str) -> Dict[str, Any]:
+        row = self.store._conn.execute(
+            "SELECT slug, project_id FROM kanban_boards WHERE slug=?"
+            " ORDER BY id LIMIT 1", (slug,),
+        ).fetchone()
+        if row is None:
+            from .host_adapter import KanbanAdapterError
+
+            raise KanbanAdapterError("board_not_found", "canonical board was not found")
+        return dict(row)
 
     def add_card(self, board_id: str, card: BoardCard) -> str:
         with self.store.tx() as cx:

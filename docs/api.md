@@ -41,7 +41,7 @@ The running application is authoritative. Use:
 |---|---|---|
 | Projects | `GET /projects`, project lifecycle/settings routes | Stewardship metadata plus canonical project identity |
 | Lifecycle | `POST /projects/{id}/{pause,resume,freeze,disable,re-enable,archive,restore}` | Project Stewardship phase state, guarded by the Phase 1 transition matrix |
-| Onboarding | `POST /onboard` | Canonical Hermes project/board first; Project Stewardship governance second |
+| Onboarding | `POST /onboard` | Canonical Hermes project/board first; Project Stewardship governance second. `create_board: false` (forced server-wide by `STEWARD_ONBOARD_BIND_ONLY=1`) binds an existing, unarchived board that no other project owns and refuses otherwise (`board_not_found` 422, `board_archived` / `board_bound_elsewhere` 409) |
 | Membership and team | `GET /projects/{id}/members`, `GET /projects/{id}/team`, `POST /projects/{id}/members`, `DELETE /projects/{id}/members/{slug}`, `POST .../lead`, `POST .../state`, `POST .../relink` | Project Stewardship membership store; requires a verified principal holding `membership_admin` or `lead_transfer` |
 | Transfers and operations | `POST /projects/{id}/transfers/preview`, `POST .../transfers/execute`, `POST .../reassignments`, `GET /operations/{op_id}`, `POST /operations/{op_id}/retry` | Durable Project Stewardship saga journal plus conditional canonical Kanban writes and readback; requires `bulk_reassignment` |
 | Work | list/create/detail/edit/assign/transition/dependency routes under `/projects/{id}/work-items` | Canonical Hermes Kanban plus Project Stewardship planning metadata |
