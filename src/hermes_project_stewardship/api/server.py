@@ -1167,6 +1167,13 @@ def create_app(
             ]
         }
 
+    @router.get("/projects/{project_id}/objective-items")
+    def objective_items(project_id: str, objective: Optional[str] = None):
+        try:
+            return svc.objective_items(project_id, objective)
+        except ServiceError as exc:  # unknown project or objective
+            raise HTTPException(404, str(exc)) from None
+
     @router.post("/projects/{project_id}/objectives")
     def add_objective(project_id: str, body: ObjectiveRequest):
         return svc.add_objective(

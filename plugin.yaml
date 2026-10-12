@@ -9,6 +9,7 @@ provides_tools:
   - steward_status
   - steward_run_cycle
   - steward_propose_initiative
+  - steward_objective_items
 provides_hooks: []
 python_dependencies:
   - fastapi>=0.104,<1

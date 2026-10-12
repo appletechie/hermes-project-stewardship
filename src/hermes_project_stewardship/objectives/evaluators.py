@@ -4,7 +4,10 @@ Targets use a small, strict comparison grammar:
     ">=0.99", "<=5", ">90", "<10", "==1", "!=0"
 The measured value is:
 - command evaluator: exit code 0 => 1.0 else 0.0 (unless the command's stdout
-  ends with a single float on the last line — then that float is the measure);
+  ends with a single float on the last line — then that float is the measure).
+  The last line may instead be a JSON object, ``{"measure": 3, "items":
+  [{"id": ..., "label": ..., "detail": ...}]}``: ``measure`` is the measure and
+  ``items`` names what it counted (kept as evidence, never as authority);
 - manual evaluator: the recorded status passed with evidence.
 
 Command evaluators ALWAYS run through security.allowlist.run_allowlisted.
@@ -12,6 +15,8 @@ Command evaluators ALWAYS run through security.allowlist.run_allowlisted.
 
 from __future__ import annotations
 
+import json
+import math
 import re
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
@@ -20,8 +25,14 @@ from typing import Callable, FrozenSet, Optional
 
 from ..domain.models import Objective, ObjectiveResult
 from ..security.allowlist import CommandNotPermitted, run_allowlisted
+from ..security.untrusted import clean_text
 
 _TARGET_RE = re.compile(r"^(>=|<=|>|<|==|!=)\s*(-?\d+(?:\.\d+)?)$")
+
+MAX_EVIDENCE_LINE_BYTES = 64 * 1024
+MAX_EVIDENCE_ITEMS = 50
+MAX_ITEM_FIELD_CHARS = 300
+_ITEM_FIELDS = ("id", "label", "detail")
 
 
 @dataclass
@@ -184,12 +195,15 @@ class ObjectiveEvaluator:
                 target_met=False,
                 detail=f"blocked: {e}",
             )
-        measured = self._measure(result)
+        evidence = None if result.timed_out else _evidence_line(result.stdout)
+        measured = evidence[0] if evidence else self._measure(result)
+        invalid = evidence[2] if evidence else None
         target_met = _compare(measured, objective.target) if measured is not None else False
-        passed = result.ok and (target_met if measured is not None else True)
+        passed = result.ok and target_met  # an unknown measure never passes
         detail = (
             f"exit={result.exit_code}"
             + (" timed_out" if result.timed_out else "")
+            + (f" invalid_evidence={invalid}" if invalid else "")
             + (f" stderr_head={result.stderr[:200]}" if result.stderr and not result.ok else "")
         )
         return ObjectiveResult(
@@ -199,6 +213,7 @@ class ObjectiveEvaluator:
             measured=measured,
             target_met=target_met,
             detail=detail,
+            items=evidence[1] if evidence else None,
         )
 
     @staticmethod
@@ -212,6 +227,50 @@ class ObjectiveEvaluator:
             if m:
                 return float(m.group(0))
         return 1.0 if result.ok else 0.0
+
+
+def _evidence_line(stdout: str):
+    """(measure, items, invalid) from a final ``{"measure": ..., "items": [...]}`` line.
+
+    None when the last line does not start with "{", so a bare number or the
+    exit code still decides the measure. A line that starts with "{" but is
+    not valid evidence gives (None, None, <fixed reason>): an unknown measure,
+    never an exception, so the rest of the cycle still runs. Items are
+    untrusted command output: at most MAX_EVIDENCE_ITEMS are kept, each with
+    only its id/label/detail strings, stripped of control characters and cut
+    to MAX_ITEM_FIELD_CHARS.
+    """
+    lines = [line.strip() for line in (stdout or "").splitlines() if line.strip()]
+    if not lines or not lines[-1].startswith("{"):
+        return None
+    if len(lines[-1].encode("utf-8", errors="replace")) > MAX_EVIDENCE_LINE_BYTES:
+        return None, None, "line_too_long"
+    try:
+        payload = json.loads(lines[-1])
+    except (ValueError, TypeError, RecursionError):
+        return None, None, "not_json"
+    if not isinstance(payload, dict):
+        return None, None, "not_an_object"
+    measure = payload.get("measure")
+    if isinstance(measure, bool) or not isinstance(measure, (int, float)):
+        return None, None, "bad_measure"
+    try:
+        measure = float(measure)
+    except OverflowError:
+        return None, None, "bad_measure"
+    if not math.isfinite(measure):
+        return None, None, "bad_measure"
+    raw = payload.get("items", [])
+    if not isinstance(raw, list) or not all(
+        isinstance(item, dict) and all(isinstance(item.get(key, ""), str) for key in _ITEM_FIELDS)
+        for item in raw
+    ):
+        return None, None, "bad_items"
+    items = [
+        {key: clean_text(item[key], MAX_ITEM_FIELD_CHARS) for key in _ITEM_FIELDS if key in item}
+        for item in raw[:MAX_EVIDENCE_ITEMS]
+    ]
+    return measure, items, None
 
 
 DEFAULT_EVALUATOR = ObjectiveEvaluator()

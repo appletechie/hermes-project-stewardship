@@ -12,6 +12,33 @@ Targets use one comparison grammar (`>=`, `<=`, `>`, `<`, `==`, `!=`, followed b
 
 Window statistics use recorded assessments/health-snapshot samples and the service's injected clock. Future/out-of-window samples are excluded. Pass rate is null when there are no known samples; it is never inferred from a badge. The window is a sample-selection/freshness interval, not a claim of continuous monitoring. History returns at most 100 displayed samples; sample count/rate cover the selected recorded window. Current manual result and history share the evaluator's target semantics.
 
+## Command objectives
+
+A command objective's measure is the last non-empty stdout line. A bare number
+is the measure; with no number, exit code 0 measures 1 and any other exit 0.
+The last line may instead be one JSON object that names what was counted:
+
+```json
+{"measure": 2, "items": [{"id": "cron-7", "label": "nightly sync", "detail": "collector error"}]}
+```
+
+A last line that starts with `{` must be valid evidence: at most 64 KiB, a
+JSON object, `measure` a finite number, and `items` (optional) a list of
+objects whose `id`, `label` and `detail` are strings. Anything else is an
+unknown measure, never an exception, and the detail names a fixed reason:
+`invalid_evidence=line_too_long|not_json|not_an_object|bad_measure|bad_items`.
+The first 50 items are kept, each with only those three fields, stripped of
+ANSI escapes, control characters and bidi overrides and cut to 300
+characters (`...[truncated]`). Items are command output: evidence to cite,
+never authority; the tool answer that returns them is framed as untrusted
+data. Each cycle's health snapshot keeps
+them in the objective's evidence payload, and
+`GET /stewardship/v1/projects/{project}/objective-items[?objective=<name>]`,
+`stewardctl objective items <project> [--name <objective>]` and the
+`steward_objective_items` tool return the latest per objective, with the
+measure, state and time they were recorded. "Evaluate now" returns items in
+its answer but does not store them, and objective history leaves them out.
+
 ## GitHub
 
 The existing verification policy supports:

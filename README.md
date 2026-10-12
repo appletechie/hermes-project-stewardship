@@ -107,7 +107,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/threat-model.md) bef
 |---|---|
 | Desktop | Project Stewardship in the Hermes Desktop sidebar |
 | Chat (Discord and other Hermes gateways) | `/project-status`, `/project-initiatives`, `/project-pause`, `/project-reconcile` |
-| Your agents | Tools `steward_status`, `steward_run_cycle` and `steward_propose_initiative`, and the bundled `project-stewardship` skill |
+| Your agents | Tools `steward_status`, `steward_run_cycle`, `steward_propose_initiative` and `steward_objective_items`, and the bundled `project-stewardship` skill |
 | Terminal | `stewardctl`, or `hermes stewardship` |
 | Browser | A supported subset in the Hermes web dashboard |
 | HTTP | `/stewardship/v1`: bearer token, rate limited, closed until a token is set |
