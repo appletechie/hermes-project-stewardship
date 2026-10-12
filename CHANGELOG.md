@@ -6,6 +6,13 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Longer command-objective details.** A failed command objective keeps the
+  first 200 characters of its stderr as its detail; a project can raise that
+  to at most 4000 with `verification.objective_detail_chars` (or
+  `stewardctl project enable --objective-detail-chars`); a value outside
+  1..4000 is refused when saved. The default is unchanged.
+
 ### Fixed
 - **Approving an initiative no longer leaves it approved but unbound.** The
   board is resolved and checked on the Kanban host before the approval is
