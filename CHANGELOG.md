@@ -17,6 +17,16 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   for the cards it creates, like approval does, so the work-items view and
   reconciliation see them. A board the project is not bound to is a 409.
 
+### Added
+- **Per-project validation steps.** `verification_policy.validation_steps`
+  (project settings) lists the cards created after Implement when an
+  initiative is bound. Unset keeps the Validate and Outcome check cards; an
+  empty list creates the Implement card only. An initiative's own
+  `validation_contract.steps` still win. Set it through
+  `PATCH /projects/{id}/settings` or
+  `stewardctl project validation-steps <project> [--step S ... | --none | --default]`.
+  No schema change.
+
 ## [0.4.0] - 2026-10-11
 
 The Project Stewardship Desktop app becomes the main surface, and every part
