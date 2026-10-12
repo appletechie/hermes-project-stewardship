@@ -76,6 +76,14 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   objective update --name <objective>` changes its description, target,
   severity or command. The API and Desktop already could.
 
+### Fixed
+- **Agent tools answer refusals instead of failing.** `steward_run_cycle`,
+  `steward_status` and `steward_propose_initiative` return
+  `{"refused": "<reason>"}` when the project is paused or frozen, the cycle
+  budget is spent, another cycle is running, the project is unknown or a
+  proposal is a duplicate. They used to raise, which Hermes reports as a tool
+  error the agent cannot tell apart from a crash.
+
 ## [0.4.0] - 2026-10-11
 
 The Project Stewardship Desktop app becomes the main surface, and every part
