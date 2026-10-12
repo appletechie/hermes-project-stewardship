@@ -264,3 +264,67 @@ def test_onboarding_rejects_real_membership_change_between_host_and_local_write(
     assert dict(operation) == {"state": "incomplete", "local_applied_revision": None}
     assert "dockyard-onboard-alpha" in adapter.by_key
     store.close()
+
+
+# ---- bind-only onboarding: existing boards only, never a new one -----------
+
+
+class BoardsAdapter(ProvisioningAdapter):
+    def __init__(self, store: Store, boards: dict) -> None:
+        super().__init__(store)
+        self.boards = boards
+
+    def get_board(self, slug: str) -> dict:
+        if slug not in self.boards:
+            raise KanbanAdapterError("board_not_found", "canonical board was not found")
+        return {"slug": slug, **self.boards[slug]}
+
+
+def _bind_only(tmp_path, monkeypatch, boards, *, env=True, **overrides):
+    repo = tmp_path / "alpha"
+    repo.mkdir()
+    if env:
+        monkeypatch.setenv("STEWARD_ONBOARD_BIND_ONLY", "1")
+    store = Store(tmp_path / "dockyard.db")
+    adapter = BoardsAdapter(store, boards)
+    client = TestClient(create_app(store, kanban_adapter=adapter))
+    response = client.post("/stewardship/v1/onboard", json={**_payload(repo), **overrides})
+    enabled = store._conn.execute("SELECT COUNT(*) AS n FROM project_stewardship").fetchone()["n"]
+    store.close()
+    return response, adapter, enabled
+
+
+def test_bind_only_onboarding_refuses_a_board_that_does_not_exist(tmp_path, monkeypatch):
+    """The fleet onboards projects onto boards it already has; onboarding must
+    never provision a new board there (it replaced upstream's route to stop it)."""
+    response, adapter, enabled = _bind_only(tmp_path, monkeypatch, {})
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "board_not_found"
+    assert "binds existing boards only" in response.json()["error"]["message"]
+    assert adapter.calls == [] and enabled == 0
+
+
+def test_a_request_can_ask_for_bind_only_onboarding(tmp_path, monkeypatch):
+    response, adapter, enabled = _bind_only(
+        tmp_path, monkeypatch, {}, env=False, create_board=False)
+
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "board_not_found"
+    assert adapter.calls == [] and enabled == 0
+
+
+def test_bind_only_onboarding_binds_an_existing_unbound_board(tmp_path, monkeypatch):
+    response, adapter, enabled = _bind_only(tmp_path, monkeypatch, {"alpha": {}})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["canonical"]["board"]["slug"] == "alpha"
+    assert len(adapter.calls) == 1 and enabled == 1
+
+
+@pytest.mark.parametrize("board", [{"project_id": "p_someone_else"}, {"archived": True}])
+def test_bind_only_onboarding_refuses_a_board_it_cannot_take(tmp_path, monkeypatch, board):
+    response, adapter, enabled = _bind_only(tmp_path, monkeypatch, {"alpha": board})
+
+    assert response.status_code == 409, response.text
+    assert adapter.calls == [] and enabled == 0
