@@ -49,6 +49,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   `board_not_found` ("onboarding binds existing boards only"), an archived
   board or one another project owns is a 409, all before anything is written.
 
+- **A crashed counter no longer reads as "0 found".** A command objective
+  that exits non-zero without printing a number used to measure 0, which met
+  a `<=0` target. It now measures nothing (`unknown`, detail `no_measure`), so
+  the cycle fails closed instead of reporting a count it never took.
+  Exit-code objectives (such as `>=1`) still measure 0 and fail as before.
+
 ## [0.4.0] - 2026-10-11
 
 The Project Stewardship Desktop app becomes the main surface, and every part
