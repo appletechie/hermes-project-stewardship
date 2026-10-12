@@ -224,6 +224,12 @@ class ProjectKanbanHostAdapter(KanbanAdapter):
         except Exception as exc:
             raise self._mapped_error(exc) from None
 
+    def get_board(self, slug: str) -> dict[str, Any]:
+        try:
+            return dict(self.host.get_board(slug))
+        except Exception as exc:
+            raise self._mapped_error(exc) from None
+
     def validate_project(self, **payload: Any) -> dict[str, Any]:
         try:
             return dict(self.host.validate_project(**payload))
