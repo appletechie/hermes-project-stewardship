@@ -12,6 +12,41 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   to at most 4000 with `verification.objective_detail_chars` (or
   `stewardctl project enable --objective-detail-chars`); a value outside
   1..4000 is refused when saved. The default is unchanged.
+- **Per-project validation steps.** `verification_policy.validation_steps`
+  (project settings) lists the cards created after Implement when an
+  initiative is bound. Unset keeps the Validate and Outcome check cards; an
+  empty list creates the Implement card only. An initiative's own
+  `validation_contract.steps` still win. Set it through
+  `PATCH /projects/{id}/settings` or
+  `stewardctl project validation-steps <project> [--step S ... | --none | --default]`.
+  No schema change.
+- **Assign the Implement card when binding.** `POST /initiatives/{ref}/approve`
+  and `POST /initiatives/{ref}/bind-board` take an optional `assignee`. It
+  must be a profile the Kanban host runs work for: the dispatcher's
+  `kanban.dispatch_profiles` on the vanilla host, else any existing
+  profile. An unknown assignee is refused before the approval is recorded.
+  The Validate and Outcome check cards stay unassigned.
+- **Bind-only onboarding.** `POST /onboard` with `create_board: false`, or any
+  onboarding when the server runs with `STEWARD_ONBOARD_BIND_ONLY=1`, binds an
+  existing board and never provisions one: a missing board is a 422
+  `board_not_found` ("onboarding binds existing boards only"), an archived
+  board or one another project owns is a 409, all before anything is written.
+- **Objective descriptions from the CLI.** `stewardctl objective add
+  --description` sets an objective's description, and the new `stewardctl
+  objective update --name <objective>` changes its description, target,
+  severity or command. The API and Desktop already could.
+- **Structured objective evidence.** A command objective may end its stdout
+  with one JSON line, `{"measure": 2, "items": [{"id": ..., "label": ...,
+  "detail": ...}]}`, instead of a bare number: `measure` is the measure and
+  `items` names what failed. Items are kept in the cycle's health snapshot (no
+  schema change) and read back with the new `steward_objective_items` tool,
+  `stewardctl objective items` and
+  `GET /stewardship/v1/projects/{project}/objective-items`. A bare number
+  works as before. Evidence is untrusted: a malformed, oversized or
+  wrong-typed line is an unknown measure with a fixed reason
+  (`invalid_evidence=...`), never an exception, and at most 50 items of
+  three stripped strings of 300 characters are kept. See
+  `docs/objective-evidence.md`.
 
 ### Fixed
 - **Approving an initiative no longer leaves it approved but unbound.** The
@@ -23,39 +58,12 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 - **`POST /initiatives/{ref}/bind-board` records canonical work bindings**
   for the cards it creates, like approval does, so the work-items view and
   reconciliation see them. A board the project is not bound to is a 409.
-
-### Added
-- **Per-project validation steps.** `verification_policy.validation_steps`
-  (project settings) lists the cards created after Implement when an
-  initiative is bound. Unset keeps the Validate and Outcome check cards; an
-  empty list creates the Implement card only. An initiative's own
-  `validation_contract.steps` still win. Set it through
-  `PATCH /projects/{id}/settings` or
-  `stewardctl project validation-steps <project> [--step S ... | --none | --default]`.
-  No schema change.
-
-### Added
-- **Assign the Implement card when binding.** `POST /initiatives/{ref}/approve`
-  and `POST /initiatives/{ref}/bind-board` take an optional `assignee`. It
-  must be a profile the Kanban host runs work for: the dispatcher's
-  `kanban.dispatch_profiles` on the vanilla host, else any existing
-  profile. An unknown assignee is refused before the approval is recorded.
-  The Validate and Outcome check cards stay unassigned.
-
 - **A profile-scoped dashboard sees the root's projects.** The Kanban host
   adapter now serves the Hermes root above the active profile
   (`<root>/profiles/<name>` -> `<root>`, as the database lookup already
   does) instead of the profile's own home, where it found no projects and
   only the default profile. `STEWARD_KANBAN_HOME` or an explicit
   `hermes_home` still choose another home.
-
-### Added
-- **Bind-only onboarding.** `POST /onboard` with `create_board: false`, or any
-  onboarding when the server runs with `STEWARD_ONBOARD_BIND_ONLY=1`, binds an
-  existing board and never provisions one: a missing board is a 422
-  `board_not_found` ("onboarding binds existing boards only"), an archived
-  board or one another project owns is a 409, all before anything is written.
-
 - **A crashed counter no longer reads as "0 found".** A command objective
   that exits non-zero without printing a number used to measure 0, which met
   a `<=0` target. It now measures nothing (`unknown`, detail `no_measure`), so
@@ -69,14 +77,6 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   process group is killed, including a grandchild that kept a pipe open. A
   flood records `output_too_large` with an unknown measure, like a timeout;
   other objectives in the cycle still run.
-
-
-- **Objective descriptions from the CLI.** `stewardctl objective add
-  --description` sets an objective's description, and the new `stewardctl
-  objective update --name <objective>` changes its description, target,
-  severity or command. The API and Desktop already could.
-
-### Fixed
 - **Agent tools answer refusals instead of failing.** `steward_run_cycle`,
   `steward_status` and `steward_propose_initiative` return
   `{"refused": "<reason>"}` when the project is paused or frozen, the cycle

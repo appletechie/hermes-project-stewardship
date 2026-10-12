@@ -207,6 +207,8 @@ class CycleEngine:
                         "state": res.state,
                         "detail": res.detail,
                     }
+                    if res.items is not None:
+                        res_dict["items"] = res.items
                 if obj.evaluator_type == "integration" and obj.integration == "github" and ctx.github_evidence:
                     res_dict["source_evidence"] = ctx.github_evidence
                 res_dict["severity"] = obj.severity

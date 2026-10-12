@@ -1759,6 +1759,10 @@ class StewardshipService:
                 "state": res.state,
                 "detail": res.detail,
             }
+            # Items ride along in the answer; this table has no evidence
+            # column, so only cycle snapshots keep them (objective_items).
+            if res.items is not None:
+                res_dict["items"] = res.items
         # Sample persistence: command evaluations always record the attempt
         # (blocked/failed attempts stay visible but never count as passes).
         # Integration evaluations record only when real evidence was fetched;
@@ -1843,7 +1847,9 @@ class StewardshipService:
                 for item in self.store._uj(row["evidence_json"], []):
                     payload = item.get("payload_json", {})
                     if item.get("kind") == "objective" and payload.get("objective_id") == objective_id:
-                        samples.append({**payload, "recorded_at": row["created_at"]})
+                        # Items stay out of the history; objective_items serves the latest.
+                        sample = {k: v for k, v in payload.items() if k != "items"}
+                        samples.append({**sample, "recorded_at": row["created_at"]})
             # D6 single-objective evaluations ("Evaluate now") are recorded
             # separately from full-cycle health snapshots; both feed the
             # same evidence history.
@@ -1900,6 +1906,53 @@ class StewardshipService:
             result.update(state=latest["state"], evidence_age_seconds=latest["evidence_age_seconds"],
                           detail=latest.get("detail") or f"latest recorded evidence is {latest['state']}")
         return result
+
+    def objective_items(
+        self, project_id: str, objective: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Latest structured evidence items per objective (read-only).
+
+        For each enabled objective (or only the one named) this is the newest
+        cycle snapshot sample: its state, measure and the items its command
+        printed in a ``{"measure": ..., "items": [...]}`` line. ``items`` is
+        None when that sample carried none; ``recorded_at`` is None when no
+        cycle has evaluated the objective yet. Never runs a command.
+        """
+        wanted = self.objectives(project_id)
+        if objective is not None:
+            wanted = [o for o in wanted if o.name == objective]
+            if not wanted:
+                raise ServiceError(f"unknown objective '{objective}' for project '{project_id}'")
+        latest: Dict[int, Dict[str, Any]] = {}
+        ids = {o.id for o in wanted}
+        rows = self.store._conn.execute(
+            "SELECT evidence_json, created_at FROM project_health_snapshots"
+            " WHERE project_id=? ORDER BY id DESC LIMIT 200",
+            (project_id,),
+        )
+        for row in rows:
+            for item in self.store._uj(row["evidence_json"], []):
+                payload = item.get("payload_json", {})
+                oid = payload.get("objective_id")
+                if item.get("kind") == "objective" and oid in ids and oid not in latest:
+                    latest[oid] = {**payload, "recorded_at": row["created_at"]}
+            if len(latest) == len(ids):
+                break
+        return {
+            "project_id": project_id,
+            "objectives": [
+                {
+                    "objective_id": o.id,
+                    "name": o.name,
+                    "target": o.target,
+                    "state": latest.get(o.id, {}).get("state", "unknown"),
+                    "measured": latest.get(o.id, {}).get("measured"),
+                    "recorded_at": latest.get(o.id, {}).get("recorded_at"),
+                    "items": latest.get(o.id, {}).get("items"),
+                }
+                for o in wanted
+            ],
+        }
 
     def latest_assessment(
         self, project_id: str, objective_id: int

@@ -37,7 +37,9 @@ memory or conversation; canonical state lives in the stewardship store.
    evaluation runs first.
 2. Read the result. Classify:
    - `healthy` + no failed objectives → record finding if notable; stop.
-   - failures/contradictions → continue.
+   - failures/contradictions → continue. A failed objective whose result
+     has `items` names what failed; cite the items, one root cause each.
+     `steward_objective_items(project_id)` reads the latest items again.
 3. For each failed high-severity objective, propose AT MOST one initiative
    per root cause. Include: title, evidence citation, expected outcome,
    risk, dedupe_key (`<objective>:<root-cause-slug>`).
