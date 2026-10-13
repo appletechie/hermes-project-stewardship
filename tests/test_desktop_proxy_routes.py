@@ -71,6 +71,9 @@ def _desktop_calls():
     """(method, path, where) for every api(...) call whose path is a string literal."""
     calls, dynamic = [], []
     for source in sorted(DESKTOP_SRC.rglob("*.js")):
+        # Fleet-only: src/fleet/ calls routes the hermes-fleet wrapper adds; that repo checks them.
+        if source.relative_to(DESKTOP_SRC).parts[0] == "fleet":
+            continue
         text = source.read_text()
         for match in re.finditer(r"\bapi\(\s*", text):
             where = f"{source.relative_to(DESKTOP_SRC)}:{text.count(chr(10), 0, match.start()) + 1}"
