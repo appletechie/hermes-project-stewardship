@@ -87,3 +87,5 @@ jobs:
         env:
           DOCKYARD_CAPTURE_SCREENSHOTS: "0"
         run: node --experimental-vm-modules --test repro-live.test.mjs milestone-chain.test.mjs
+      - name: Test fleet web dashboard bundle
+        run: node --test hermes_dockyard_plugin/fleet_web/
