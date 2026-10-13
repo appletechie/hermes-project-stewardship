@@ -144,6 +144,7 @@ function startPopupPoller(ctxRest) {
   // Pop-ups are a host capability: without host.notify there is nothing to
   // surface them on (jsdom/test hosts), so no poller, no stray timers.
   if (typeof host?.notify !== 'function') return
+  if (typeof ctxRest !== 'function') return
   if (typeof window === 'undefined' || window.__dockyardPopupPoller) return
   const surfaced = new Set()
   const tick = async () => {
@@ -188,7 +189,7 @@ function stopPopupPoller() {
 // module scope, so the listeners only arm when a real surface exists.
 if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', stopPopupPoller)
-  window.addEventListener('pageshow', () => startPopupPoller())
+  window.addEventListener('pageshow', () => startPopupPoller(_rest))
 }
 
 const __plugin = {

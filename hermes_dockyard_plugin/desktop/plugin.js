@@ -26906,6 +26906,7 @@ function surfaceMore(count) {
 }
 function startPopupPoller(ctxRest) {
   if (typeof host3?.notify !== "function") return;
+  if (typeof ctxRest !== "function") return;
   if (typeof window === "undefined" || window.__dockyardPopupPoller) return;
   const surfaced = /* @__PURE__ */ new Set();
   const tick = async () => {
@@ -26938,7 +26939,7 @@ function stopPopupPoller() {
 }
 if (typeof window !== "undefined") {
   window.addEventListener("pagehide", stopPopupPoller);
-  window.addEventListener("pageshow", () => startPopupPoller());
+  window.addEventListener("pageshow", () => startPopupPoller(_rest));
 }
 var __plugin = {
   id: "hermes-project-stewardship",

@@ -162,3 +162,53 @@ test('E5 a failed shown-mark is retried without showing the pop-up again', { tim
     'the pop-up shows once even though its first shown-mark failed')
   assert.deepEqual(shownBodies, [{ ids: [9] }, { ids: [9] }], 'the shown mark is retried until the backend accepts it')
 })
+
+test('E5 restored surfaces fetch, display and acknowledge pop-ups with the registered REST context', async (t) => {
+  const dom = new JSDOM('<!doctype html><html><body></body></html>', { pretendToBeVisual: true })
+  const previous = { window: global.window, document: global.document }
+  global.window = dom.window
+  global.document = dom.window.document
+  const timers = new Map()
+  let timerId = 0
+  t.mock.method(globalThis, 'setInterval', (tick) => {
+    timers.set(++timerId, tick)
+    return timerId
+  })
+  t.mock.method(globalThis, 'clearInterval', (id) => timers.delete(id))
+  t.mock.method(dom.window, 'setTimeout', () => 0)
+  const calls = []
+  const notifications = []
+  let popupId = 1
+  const rest = async (path, init) => {
+    calls.push({ path, ...init })
+    return path === '/notifications/popups' ? { popups: [popupRow(popupId)], more: 0 } : {}
+  }
+
+  try {
+    const { plugin } = evaluatePlugin('', { notify: (item) => notifications.push(item) }, { assertImports: false })
+    dom.window.dispatchEvent(new dom.window.Event('pageshow'))
+    assert.equal(timers.size, 0, 'a surface cannot start polling before its REST context is registered')
+    plugin.register({ rest, os: {}, registerMany() {} })
+
+    for (popupId = 1; popupId <= 3; popupId++) {
+      if (popupId > 1) {
+        dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+        assert.equal(timers.size, 0, 'hiding the surface clears its interval')
+        dom.window.dispatchEvent(new dom.window.PageTransitionEvent('pageshow', { persisted: true }))
+      }
+      dom.window.dispatchEvent(new dom.window.Event('pageshow'))
+      assert.equal(timers.size, 1, 'showing an active surface does not stack intervals')
+      await timers.values().next().value()
+      assert.deepEqual(calls.slice(-2), [
+        { path: '/notifications/popups', method: 'GET' },
+        { path: '/notifications/popups/shown', method: 'POST', body: { ids: [popupId] } },
+      ])
+      assert.equal(notifications.at(-1)?.id, `dockyard-notification-${popupId}`)
+    }
+    assert.equal(notifications.length, 3, 'each restored surface displays its new notification')
+  } finally {
+    global.window = previous.window
+    global.document = previous.document
+    dom.window.close()
+  }
+})
