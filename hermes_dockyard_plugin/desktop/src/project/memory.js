@@ -18,6 +18,7 @@ import { isUnlinkedError } from '../data/unlinked.js'
 import { UNLINKED_TITLE } from '../data/unlinked.js'
 import { Button } from '../lib/ui.js'
 import { StatusTag } from '../lib/ui.js'
+import { FleetMemoryNote } from '../fleet/ui.js'
 import { formatWhen } from '../lib/ui.js'
 import { number } from '../lib/ui.js'
 import { plural } from '../lib/ui.js'
@@ -168,6 +169,7 @@ export function ProjectMemoryPanel({ project }) {
         jsxs('div', { children: [
           jsx('h2', { children: 'Project memory' }),
           jsx('p', { children: "What this project's bots are told when they work on it: rules first, then decisions, then facts." }),
+          jsx(FleetMemoryNote, {}),
         ]}),
         jsx(StatusTag, { tone: 'neutral', label: `${number(active.length)} ${plural(active.length, 'entry', 'entries')}` }),
       ]}),

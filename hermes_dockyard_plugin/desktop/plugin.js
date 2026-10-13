@@ -7933,6 +7933,19 @@ function FleetOnboarding(props) {
   if (state.mode === "vanilla") return jsx(OnboardingWizard, props);
   return jsx(BindOnlyWizard, { ...props, options: state.data ?? null, error: state.mode === "unavailable" ? state.error : null, onRetry: () => setVersion((value) => value + 1) });
 }
+function FleetMemoryNote() {
+  const [fleet, setFleet] = useState(false);
+  useEffect(() => {
+    let current = true;
+    fleetRead().then((result) => {
+      if (current) setFleet(result.mode === "fleet");
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+  return fleet ? jsx("p", { className: "dockyard-meta", "data-fleet-memory-note": true, children: "Shared with the project lead each cycle." }) : null;
+}
 async function refuseOwnerlessApprove() {
   const { mode } = await fleetRead();
   if (mode === "vanilla") return;
@@ -19994,7 +20007,8 @@ function ProjectMemoryPanel({ project }) {
       jsxs("div", { className: "dockyard-section-head", children: [
         jsxs("div", { children: [
           jsx("h2", { children: "Project memory" }),
-          jsx("p", { children: "What this project's bots are told when they work on it: rules first, then decisions, then facts." })
+          jsx("p", { children: "What this project's bots are told when they work on it: rules first, then decisions, then facts." }),
+          jsx(FleetMemoryNote, {})
         ] }),
         jsx(StatusTag, { tone: "neutral", label: `${number(active.length)} ${plural2(active.length, "entry", "entries")}` })
       ] }),

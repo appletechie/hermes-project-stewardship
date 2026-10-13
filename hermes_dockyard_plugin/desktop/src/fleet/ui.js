@@ -372,6 +372,18 @@ export function FleetOnboarding(props) {
   return jsx(BindOnlyWizard, { ...props, options: state.data ?? null, error: state.mode === 'unavailable' ? state.error : null, onRetry: () => setVersion((value) => value + 1) })
 }
 
+// The fleet hands the project lead its memory each cycle (its steward_status
+// tool), not through upstream's pre_llm_call hook, which it keeps off.
+export function FleetMemoryNote() {
+  const [fleet, setFleet] = useState(false)
+  useEffect(() => {
+    let current = true
+    fleetRead().then((result) => { if (current) setFleet(result.mode === 'fleet') })
+    return () => { current = false }
+  }, [])
+  return fleet ? jsx('p', { className: 'dockyard-meta', 'data-fleet-memory-note': true, children: 'Shared with the project lead each cycle.' }) : null
+}
+
 // Workflow gate review approves from inside the canvas, which has no owner
 // picker: on the fleet the decision is made in the Approval Inbox instead.
 export async function refuseOwnerlessApprove() {
