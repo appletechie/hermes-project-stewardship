@@ -5,15 +5,6 @@ import assert from 'node:assert/strict'
 
 const model = await import('./src/fleet/model.js')
 
-test('a 404 (or the plugin off) means a vanilla backend; anything else fails closed', () => {
-  const wrapped = (raw, extra = {}) => Object.assign(new Error('rewritten by api()'), { cause: new Error(raw) }, extra)
-  assert.equal(model.probeMode(wrapped('404: Not Found')), 'vanilla')
-  assert.equal(model.probeMode(Object.assign(new Error('Project Stewardship is not switched on'), { pluginOff: true })), 'vanilla')
-  assert.equal(model.probeMode(wrapped('500: boom')), 'unavailable')
-  assert.equal(model.probeMode(wrapped('503: degraded')), 'unavailable')
-  assert.equal(model.probeMode(new Error('Failed to fetch')), 'unavailable')
-})
-
 const QUEUE = {
   mode: 'fleet',
   dispatch: { profiles: ['techie'], initiatives: [] },

@@ -7468,10 +7468,6 @@ function attentionPanel(item) {
 
 // hermes_dockyard_plugin/desktop/src/fleet/model.js
 var SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-function probeMode(error) {
-  const raw = String(error?.cause?.message ?? error?.message ?? error ?? "");
-  return error?.pluginOff || /^404\b/.test(raw) ? "vanilla" : "unavailable";
-}
 function waitText(record) {
   return `${record?.who || "someone"}${record?.reference ? ` (${record.reference})` : ""}${record?.expected_by ? ` until ${record.expected_by}` : ""}`;
 }
@@ -7552,12 +7548,7 @@ var enc = encodeURIComponent;
 var message = (failure) => String(failure?.message ?? failure);
 var read = (path) => path ? api(path).then((data) => ({ data }), (failure) => ({ error: message(failure) })) : {};
 async function fleetRead(main, extra) {
-  let health;
-  try {
-    health = await api("/health");
-  } catch (failure) {
-    return { mode: probeMode(failure), error: message(failure) };
-  }
+  const health = await api("/health").catch(() => null);
   if (health?.fleet !== true) return { mode: "vanilla" };
   const [first, second] = await Promise.all([read(main), read(extra)]);
   return first.error ? { mode: "unavailable", error: first.error } : { mode: "fleet", data: first.data, extra: second.data, extraError: second.error };
@@ -7945,12 +7936,6 @@ function FleetMemoryNote() {
     };
   }, []);
   return fleet ? jsx("p", { className: "dockyard-meta", "data-fleet-memory-note": true, children: "Shared with the project lead each cycle." }) : null;
-}
-async function refuseOwnerlessApprove() {
-  const { mode } = await fleetRead();
-  if (mode === "vanilla") return;
-  emitToast("danger", "Approve this initiative from the Approval Inbox: this fleet names an owner on approval.");
-  throw new Error("approval needs an owner");
 }
 
 // hermes_dockyard_plugin/desktop/src/work-item/approvals.js
@@ -19394,7 +19379,10 @@ function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpenLibrary
       // review can never approve something else. Retry re-queues via the
       // canonical work-item transition — never an optimistic local flip.
       onApprove: async (ref) => {
-        await refuseOwnerlessApprove();
+        if ((await api("/health").catch(() => null))?.fleet === true) {
+          emitToast("danger", "Approve this initiative from the Approval Inbox: this fleet names an owner on approval.");
+          throw new Error("approval needs an owner");
+        }
         const decision = await api(`/initiatives/${encodeURIComponent(ref)}/decision`);
         await api(`/initiatives/${encodeURIComponent(ref)}/approve`, { method: "POST", body: { expected_fingerprint: decision.fingerprint } });
         await actionsRef.current.loadRuns(workflowName);

@@ -11,14 +11,6 @@
 // projects_db.normalize_slug and the fleet onboarding guard accept exactly this.
 export const SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/
 
-// What a failed GET /health means: 'vanilla' when the route is not there
-// (404, or the plugin is off for this profile), else 'unavailable': a backend
-// that could not answer, where callers fail closed.
-export function probeMode(error) {
-  const raw = String(error?.cause?.message ?? error?.message ?? error ?? '')
-  return error?.pluginOff || /^404\b/.test(raw) ? 'vanilla' : 'unavailable'
-}
-
 export function waitText(record) {
   return `${record?.who || 'someone'}${record?.reference ? ` (${record.reference})` : ''}${record?.expected_by ? ` until ${record.expected_by}` : ''}`
 }

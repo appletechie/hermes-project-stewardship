@@ -10,7 +10,7 @@
 import { Fragment, jsx, jsxs, useEffect, useState } from '../runtime/react.js'
 import { api, emitToast } from '../runtime/context.js'
 import { Button, OnboardingWizard, StatusTag, formatWhen, useDialogFocusManager } from '../lib/ui.js'
-import { SLUG, WAIT_FIELDS, boardsFor, dispatchMessage, needFor, onboardBody, onboardValid, probeMode, waitBody, waitStatus, waitText, waitTone, waitValid } from './model.js'
+import { SLUG, WAIT_FIELDS, boardsFor, dispatchMessage, needFor, onboardBody, onboardValid, waitBody, waitStatus, waitText, waitTone, waitValid } from './model.js'
 
 const enc = encodeURIComponent
 const message = (failure) => String(failure?.message ?? failure)
@@ -18,19 +18,16 @@ const message = (failure) => String(failure?.message ?? failure)
 const read = (path) => (path ? api(path).then((data) => ({ data }), (failure) => ({ error: message(failure) })) : {})
 
 // GET /health answers on every backend and only the hermes-fleet wrapper adds
-// `fleet: true`, so a vanilla backend is never asked for a route it lacks.
-// Then the fleet route a screen needs (`main`, failing closed) and an optional
-// second one (`extra`, whose failure is shown, not fatal):
+// `fleet: true`, so a vanilla backend is never asked for a route it lacks. A
+// failed /health reads as vanilla: the fleet backend itself refuses what
+// upstream's screens would send it (an approval without an owner, upstream's
+// onboarding body). Then the fleet route a screen needs (`main`, failing
+// closed) and an optional second one (`extra`, whose failure is shown):
 // { mode: 'fleet', data, extra, extraError } | { mode: 'vanilla' } | { mode: 'unavailable', error }.
 // ponytail: asked per screen mount, never cached, so a switch to another
 // connection is seen on the next screen.
 export async function fleetRead(main, extra) {
-  let health
-  try {
-    health = await api('/health')
-  } catch (failure) {
-    return { mode: probeMode(failure), error: message(failure) }
-  }
+  const health = await api('/health').catch(() => null)
   if (health?.fleet !== true) return { mode: 'vanilla' }
   const [first, second] = await Promise.all([read(main), read(extra)])
   return first.error ? { mode: 'unavailable', error: first.error } : { mode: 'fleet', data: first.data, extra: second.data, extraError: second.error }
@@ -358,7 +355,7 @@ function BindOnlyWizard({ intent, options, error: loadError, onRetry, onClose, o
 
 // Upstream's wizard against a vanilla backend; on the fleet, the bind-only
 // form with GET /onboard/options, closed (never upstream's board-creating
-// form) when the backend cannot answer.
+// form) when the options cannot be read.
 export function FleetOnboarding(props) {
   const [state, setState] = useState({ mode: 'loading' })
   const [version, setVersion] = useState(0)
@@ -382,13 +379,4 @@ export function FleetMemoryNote() {
     return () => { current = false }
   }, [])
   return fleet ? jsx('p', { className: 'dockyard-meta', 'data-fleet-memory-note': true, children: 'Shared with the project lead each cycle.' }) : null
-}
-
-// Workflow gate review approves from inside the canvas, which has no owner
-// picker: on the fleet the decision is made in the Approval Inbox instead.
-export async function refuseOwnerlessApprove() {
-  const { mode } = await fleetRead()
-  if (mode === 'vanilla') return
-  emitToast('danger', 'Approve this initiative from the Approval Inbox: this fleet names an owner on approval.')
-  throw new Error('approval needs an owner')
 }
