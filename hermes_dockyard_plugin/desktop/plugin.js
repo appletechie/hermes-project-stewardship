@@ -2297,6 +2297,9 @@ function hostIsDark() {
   if (html.classList.contains("dark")) return true;
   return Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 }
+function hostIsDesktop() {
+  return Boolean(getComputedStyle(document.documentElement).getPropertyValue("--dt-background").trim());
+}
 var VARS = [
   ["bg", "--dy-bg"],
   ["surface", "--dy-surface"],
@@ -2343,6 +2346,31 @@ var FONT_FACES = [
   ["Dockyard Space Mono", THEME_FONTS["space-mono"][0], "400"],
   ["Dockyard Space Mono", THEME_FONTS["space-mono"][1], "700"]
 ].map(([family, url, weight]) => `@font-face { font-family: "${family}"; src: url("${url}") format("woff2"); font-weight: ${weight}; font-style: normal; font-display: swap; }`);
+var desktopMix = (pct) => `color-mix(in srgb, var(--theme-foreground) ${pct}%, var(--dt-background))`;
+var DESKTOP_AUTO_CSS = `.dockyard-root[data-dy-theme="auto"][data-dy-host="hermes-desktop"][data-theme] {
+  --dy-bg: var(--dt-background);
+  --dy-surface: var(--dt-card);
+  --dy-surface-subtle: ${desktopMix(7)};
+  --dy-surface-strong: ${desktopMix(11)};
+  --dy-text: var(--theme-foreground);
+  --dy-text-2: ${desktopMix(80)};
+  --dy-text-3: ${desktopMix(68)};
+  --dy-border: var(--dt-border);
+  --dy-control-border: ${desktopMix(42)};
+  --dy-action: var(--dt-primary);
+  --dy-action-hover: color-mix(in srgb, var(--dt-primary) 90%, var(--dt-background));
+  --dy-on-action: var(--dt-primary-foreground);
+  --dy-accent-text: var(--theme-foreground);
+  --dy-accent-soft: var(--dt-accent);
+  --dy-accent-border: ${desktopMix(36)};
+  --dy-neutral: ${desktopMix(80)};
+  --dy-neutral-bg: ${desktopMix(10)};
+  --dy-focus: var(--dt-ring);
+  --dy-disabled-text: ${desktopMix(68)};
+  --dy-disabled-bg: ${desktopMix(11)};
+  color: var(--dy-text);
+  background: var(--dy-bg);
+}`;
 var THEME_CSS = `
 /* Names some rules used without a definition (accent, accent bg, secondary
    text): they now follow the active theme instead of fixed light colours. */
@@ -2355,6 +2383,7 @@ var THEME_CSS = `
 .dockyard-root a:where(:not([class])) { color: var(--dy-accent-text); }
 ${FONT_FACES.join("\n")}
 ${THEMES.filter((theme) => theme.tokens).map(themeRule).join("\n")}
+${DESKTOP_AUTO_CSS}
 /* Themes with a background: the art shows in the page gutters, the top bar is
    frosted glass, and reading surfaces (cards, panels, tables) stay opaque.
    The glass is a layer behind the bar's content, not the bar itself: a
@@ -26344,6 +26373,7 @@ function DashboardPage({ inboxCss = "" } = {}) {
   };
   const [appearance, setAppearance] = useState({ theme: DEFAULT_THEME, font: DEFAULT_FONT });
   const [hostDark, setHostDark] = useState(() => hostIsDark());
+  const [hostDesktop] = useState(() => hostIsDesktop());
   const appearanceAsked = useRef(false);
   const askAppearance = () => {
     if (appearanceAsked.current) return;
@@ -26774,6 +26804,7 @@ function DashboardPage({ inboxCss = "" } = {}) {
     className: "dockyard-root",
     "data-theme": themeMode(theme.id, hostDark),
     "data-dy-theme": theme.id,
+    "data-dy-host": hostDesktop ? "hermes-desktop" : void 0,
     "data-dy-art": theme.art ? "true" : void 0,
     "data-dy-font": appearance.font !== DEFAULT_FONT ? appearance.font : void 0,
     children: [
