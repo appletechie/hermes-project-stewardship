@@ -25,6 +25,13 @@ versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
   three stripped strings of 300 characters are kept. See
   `docs/objective-evidence.md`.
 
+### Fixed
+- **Binding an initiative needs a trusted caller.** `POST
+  /initiatives/{ref}/bind-board` starts execution and can name the Implement
+  card's owner, so it now takes its actor like approve does: the bearer
+  principal or the Desktop proxy's user, else a 403
+  `trusted_principal_required`. The body's `actor_id` is no longer read.
+
 ## [0.5.1] - 2026-10-12
 
 ### Added

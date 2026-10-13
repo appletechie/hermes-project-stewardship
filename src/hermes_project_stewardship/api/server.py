@@ -426,7 +426,6 @@ class GatewayCommandBody(BaseModel):
 class BindBoardRequest(BaseModel):
     board_slug: Optional[str] = None
     assignee: Optional[str] = None
-    actor_id: str = "stewardship-api"
 
 
 class CompleteRequest(BaseModel):
@@ -1872,11 +1871,14 @@ def create_app(
             raise HTTPException(409, str(exc)) from None
 
     @router.post("/initiatives/{ref}/bind-board")
-    def bind_board(ref: str, body: BindBoardRequest):
+    def bind_board(ref: str, body: BindBoardRequest, request: Request):
+        # Binding starts execution and names who does the work, so only a
+        # trusted caller binds, as with approve; a body actor is never read.
+        actor_id = _decision_actor(request)
         try:
             return integration.bind(
                 ref, board_slug=body.board_slug, assignee=body.assignee,
-                actor=_actor(body.actor_id, "human"))
+                actor=Actor(id=actor_id, display_name=actor_id, kind=ActorKind.HUMAN))
         except (IntegrationError, ServiceError) as e:
             raise HTTPException(409, str(e))
 

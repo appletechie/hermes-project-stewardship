@@ -850,6 +850,37 @@ def test_bind_board_route_records_canonical_bindings(tmp_path: Path):
     assert sorted(item["ref"] for item in work if item["initiative_ref"] == ref) == sorted(card_ids)
 
 
+def test_bind_board_needs_a_trusted_caller(tmp_path: Path):
+    """Binding starts execution and can name the Implement card's owner, so it
+    takes the caller from the bearer or the Desktop proxy, never the body."""
+    from fastapi.testclient import TestClient
+
+    from hermes_project_stewardship.api.middleware import desktop_proxy_headers
+    from hermes_project_stewardship.api.server import create_app
+    from hermes_project_stewardship.persistence.store import Store
+
+    host = FakeProjectKanbanHost()
+    app = create_app(Store(tmp_path / "open.sqlite"), kanban_adapter=_adapter_type()(host))
+    svc = app.state.svc
+    svc.enable("project-1", mission="keep it green", lead_profile="lead",
+               member_profiles=[], autonomy_level=2)
+    ref = svc.propose_initiative("project-1", title="Fix flaky CI", rationale="3 flakes")["ref"]
+    svc.approve_initiative(ref, actor="owner", interface="cli")
+    client = TestClient(app)
+
+    refused = client.post(f"/stewardship/v1/initiatives/{ref}/bind-board",
+                          json={"actor_id": "owner"})
+    assert refused.status_code == 403, refused.text
+    assert "trusted_principal_required" in refused.text
+    assert svc.initiative_by_ref(ref)["status"] == "approved"
+    assert host.create_calls == []
+
+    bound = client.post(f"/stewardship/v1/initiatives/{ref}/bind-board", json={},
+                        headers=desktop_proxy_headers("andrew"))
+    assert bound.status_code == 200, bound.text
+    assert svc.initiative_by_ref(ref)["status"] == "executing"
+
+
 def test_bind_board_route_refuses_a_board_the_project_is_not_bound_to(tmp_path: Path):
     client, svc, ref = _approval_client(tmp_path, FakeProjectKanbanHost())
     svc.approve_initiative(ref, actor="owner", interface="cli")
