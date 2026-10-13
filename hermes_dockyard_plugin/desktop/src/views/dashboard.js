@@ -23,6 +23,8 @@ import { EmptyState } from '../lib/ui.js'
 import { validationSummary } from '../data/loaders.js'
 import { unassignedWork } from '../data/loaders.js'
 import { emitToast } from '../runtime/context.js'
+import { FleetNeedPanel, FleetNeedsErrors, useFleetNeeds } from '../fleet/ui.js'
+import { fleetIssueLabels, withFleetRows } from '../fleet/model.js'
 export function DiscoveredProfilePicker({ profiles = [], value = '', onChange, name, label = 'Hermes profile', disabled = false }) {
   const [search, setSearch] = useState('')
   const normalised = profiles.map((profile) => ({
@@ -261,6 +263,7 @@ const ISSUE_FILTERS = Object.freeze([['all', 'All issues'], ['decision', 'Decisi
 const HEALTH_STATES = Object.freeze(['on_track', 'at_risk', 'stalled', 'idle', 'unlinked'])
 
 export function issueLabels(item) {
+  if (item?.fleet) return fleetIssueLabels(item)
   if (item?.kind === 'initiative_approval') {
     return { tag: 'Approval', tone: 'approval', impact: `Risk: ${readableLabel(item.risk)}`, open: 'Review approval' }
   }
@@ -276,7 +279,9 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
     (STATUS_PRIORITY[left.status] ?? 3) - (STATUS_PRIORITY[right.status] ?? 3))
   const decisions = view.groups?.decisions ?? []
   const interventions = view.groups?.interventions ?? []
-  const rows = [...decisions, ...interventions].sort((a, b) => (b.age_days ?? 0) - (a.age_days ?? 0))
+  // Fleet: the Needs-you queue's blocked cards, waits and ownerless work (fleet/ui.js).
+  const fleet = useFleetNeeds(view)
+  const rows = withFleetRows([...decisions, ...interventions], fleet, projects.map((project) => project.project_id)).sort((a, b) => (b.age_days ?? 0) - (a.age_days ?? 0))
   const [selected, setSelected] = useState(null)
   const [subview, setSubview] = useState('overview')
   const [directoryQuery, setDirectoryQuery] = useState('')
@@ -465,6 +470,7 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
               jsxs('div', { className: 'dockyard-command-row dockyard-command-attention-head', role: 'row', children: [
                 jsx('span', { children: 'Type' }), jsx('span', { children: 'Item' }), jsx('span', { children: 'Project' }), jsx('span', { children: 'Impact' }), jsx('span', { children: 'Waiting' }),
               ]}),
+              jsx(FleetNeedsErrors, { fleet }),
               rows.length ? rows.map((item, index) => jsxs('button', { type: 'button', className: `dockyard-command-row dockyard-command-attention-row${focusItem === item ? ' is-selected' : ''}`,
                 onClick: () => setSelected(item), 'aria-label': `Inspect ${item.title}`, children: [
                   jsx('span', { className: `dockyard-command-type ${issueLabels(item).tone}`, children: issueLabels(item).tag }),
@@ -503,6 +509,7 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
             ]}) : null,
             jsx('h4', { children: 'Recent activity' }),
             jsx('div', { className: 'dockyard-command-detail-activity', children: (view.notifications?.notifications ?? []).filter((note) => note.project === focusItem.project).slice(0, 3).map((note) => jsx('p', { children: `${note.title} · ${formatWhen(note.created_at)}` }, note.id)) }),
+            jsx(FleetNeedPanel, { item: focusItem, fleet, onChanged: onRefresh }, `${focusItem.kind}:${focusItem.ref || focusItem.title}`),
             jsx(Button, { variant: 'primary', onClick: () => focusItem.kind === 'initiative_approval' ? onInbox?.() : onOpen?.(focusItem.deep_link), children: issueLabels(focusItem).open }),
           ]}) : jsx('p', { children: 'Select an item to see its details.' }),
         ]}),

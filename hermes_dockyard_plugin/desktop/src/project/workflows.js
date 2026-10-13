@@ -30,6 +30,7 @@ import { RepeatPopover } from './workflow-design/shared.js'
 import { readStepSettings } from './workflow-design/standins.js'
 import { writeStepSettings } from './workflow-design/standins.js'
 import { EMPTY_STEP } from './workflow-design/standins.js'
+import { refuseOwnerlessApprove } from '../fleet/ui.js'
 const NO_RUNS = []
 const NO_THREAD = []
 const failureText = (failure) => String(failure?.message ?? failure ?? 'unknown error').replace(/^\d{3}:\s*/, '')
@@ -291,6 +292,7 @@ export function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpen
       // review can never approve something else. Retry re-queues via the
       // canonical work-item transition — never an optimistic local flip.
       onApprove: async (ref) => {
+        await refuseOwnerlessApprove()
         const decision = await api(`/initiatives/${encodeURIComponent(ref)}/decision`)
         await api(`/initiatives/${encodeURIComponent(ref)}/approve`, { method: 'POST', body: { expected_fingerprint: decision.fingerprint } })
         await actionsRef.current.loadRuns(workflowName)

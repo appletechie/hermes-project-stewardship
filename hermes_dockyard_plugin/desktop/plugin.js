@@ -28,10 +28,10 @@ var MISSING_LINK = /canonical (project|board) was not found/i;
 function isUnlinkedError(error) {
   return error?.unlinked === true || MISSING_LINK.test(String(error?.message ?? error ?? ""));
 }
-async function hermesRead(link, read, empty) {
+async function hermesRead(link, read2, empty) {
   if (link.unlinked) return empty;
   try {
-    return await read();
+    return await read2();
   } catch (error) {
     if (!isUnlinkedError(error)) throw error;
     link.unlinked = true;
@@ -4231,10 +4231,10 @@ function mutationMessage(path, result) {
   if (path.endsWith("/transition")) return "Work item updated";
   return "Change saved";
 }
-function emitToast(tone, message) {
+function emitToast(tone, message2) {
   if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
   window.dispatchEvent(new window.CustomEvent(TOAST_EVENT, {
-    detail: { id: ++_toastId, tone, message }
+    detail: { id: ++_toastId, tone, message: message2 }
   }));
 }
 async function api(path, init) {
@@ -4249,9 +4249,9 @@ async function api(path, init) {
     const pluginOff = isPluginOffError(error);
     const unlinked = isUnlinkedError(error);
     const projectInPath = /^\/projects\/([^/?]+)/.exec(path)?.[1];
-    const message = pluginOff ? `${PLUGIN_OFF_TITLE}.` : unlinked ? `${UNLINKED_TITLE}. ${projectInPath ? unlinkedNextStep(decodeURIComponent(projectInPath)) : "Link it to a Hermes project first."}` : /^403:\s*\[object Object\]$/.test(raw) && /^\/projects\/[^/]+\/workflows\/[^/]+\/archive$/.test(path) ? "403 Forbidden: archive permission (project_archive) is required or this action is denied. No change was made." : /(?:error\s*)?500|internal service error/i.test(raw) ? "Project Stewardship could not confirm the request." : raw;
-    if (method !== "GET" && !init?.suppressErrorToast && !quiet) emitToast("danger", message);
-    const failure = new Error(message);
+    const message2 = pluginOff ? `${PLUGIN_OFF_TITLE}.` : unlinked ? `${UNLINKED_TITLE}. ${projectInPath ? unlinkedNextStep(decodeURIComponent(projectInPath)) : "Link it to a Hermes project first."}` : /^403:\s*\[object Object\]$/.test(raw) && /^\/projects\/[^/]+\/workflows\/[^/]+\/archive$/.test(path) ? "403 Forbidden: archive permission (project_archive) is required or this action is denied. No change was made." : /(?:error\s*)?500|internal service error/i.test(raw) ? "Project Stewardship could not confirm the request." : raw;
+    if (method !== "GET" && !init?.suppressErrorToast && !quiet) emitToast("danger", message2);
+    const failure = new Error(message2);
     failure.cause = error;
     if (unlinked) failure.unlinked = true;
     if (pluginOff) failure.pluginOff = true;
@@ -7466,6 +7466,480 @@ function attentionPanel(item) {
   };
 }
 
+// hermes_dockyard_plugin/desktop/src/fleet/model.js
+var SLUG = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+function probeMode(error) {
+  const raw = String(error?.cause?.message ?? error?.message ?? error ?? "");
+  return error?.pluginOff || /^404\b/.test(raw) ? "vanilla" : "unavailable";
+}
+function waitText(record) {
+  return `${record?.who || "someone"}${record?.reference ? ` (${record.reference})` : ""}${record?.expected_by ? ` until ${record.expected_by}` : ""}`;
+}
+var waitStatus = (record) => ({ overdue: "Wait overdue", recheck: "Recheck due" })[record?.wait_status] ?? "Waiting";
+var waitTone = (record) => record?.wait_status === "overdue" ? "danger" : record?.wait_status === "recheck" ? "warning" : "info";
+var WAIT_FIELDS = Object.freeze(["who", "reference", "expected_by", "recheck_after", "note"]);
+var waitValid = (form) => Boolean(String(form?.who ?? "").trim() && (form?.expected_by || form?.recheck_after));
+function waitBody(projectId, record) {
+  const body = { state: "waiting", project_id: projectId };
+  for (const key of WAIT_FIELDS) body[key] = String(record?.[key] ?? "").trim() || null;
+  return body;
+}
+function dispatchMessage(ref, result, approved) {
+  return `${ref}${approved ? " approved," : ""} ${result?.changed ? "dispatched to" : "already with"} ${result?.owner} \xB7 card ${result?.task_id} ${String(result?.status ?? "").replaceAll("_", " ")}`;
+}
+function ageDays(since, today) {
+  const start = typeof since === "number" ? since * 1e3 : Date.parse(String(since ?? "").slice(0, 10));
+  const end = Date.parse(String(today ?? "").slice(0, 10));
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return void 0;
+  return Math.max(0, Math.floor((end - start) / 864e5));
+}
+var NEEDS = Object.freeze({
+  blocked_card: { tag: "Blocked card", tone: "blocker", impact: "Waiting on a person" },
+  wait_due: { tag: "Wait due", tone: "blocker", impact: "Wait is due again" },
+  wait_suggested: { tag: "Confirm wait?", tone: "notice", impact: "Wait suggested" },
+  undispatched: { tag: "Needs owner", tone: "notice", impact: null },
+  source_unavailable: { tag: "Source broken", tone: "blocker", impact: "Objective cannot be read" }
+});
+function withFleetRows(rows, fleet, projectIds) {
+  if (fleet?.mode !== "fleet") return rows;
+  const keep = new Set(projectIds);
+  const needs = (fleet.queue?.items ?? []).filter((need) => NEEDS[need.kind] && keep.has(need.project_id));
+  const cards = new Set(needs.filter((need) => need.kind === "blocked_card").map((need) => need.card_id));
+  return [...rows.filter((row) => !(row.cause === "blocked_item" && cards.has(row.ref))), ...needs.map((need) => ({
+    kind: `fleet_${need.kind}`,
+    cause: `fleet_${need.kind}`,
+    fleet: need,
+    title: need.title || need.card_title || need.ref || "Needs you",
+    ref: need.ref || (need.card_id ? `card ${need.card_id}` : null),
+    detail: need.detail || "",
+    project: need.project_id,
+    age_days: ageDays(need.since, fleet.queue.today),
+    deep_link: need.card_id ? `s2:work/${need.card_id}` : `s1:project/${need.project_id}`
+  }))];
+}
+function fleetIssueLabels(item) {
+  const need = item?.fleet ?? {};
+  const known = NEEDS[need.kind] ?? { tag: "Needs you", tone: "notice", impact: null };
+  return { tag: known.tag, tone: known.tone, impact: known.impact ?? need.detail ?? "Needs attention", open: need.card_id ? "Open work item" : "Open project" };
+}
+function needFor(item, fleet) {
+  if (fleet?.mode !== "fleet" || !item) return null;
+  const old = item.fleet;
+  if (old) {
+    return (fleet.queue?.items ?? []).find((need) => need.kind === old.kind && need.ref === old.ref && need.card_id === old.card_id && need.project_id === old.project_id && need.title === old.title) ?? { ...old, kind: "resolved" };
+  }
+  if (item.kind !== "initiative_approval" || !item.ref) return null;
+  return { kind: "approval", ref: item.ref, project_id: item.project, title: item.title };
+}
+var boardsFor = (boards, projectId) => (boards ?? []).filter((board) => !board.project || board.project === projectId);
+function onboardValid(form) {
+  return SLUG.test(form.project_id) && String(form.repo_path).trim().startsWith("/") && Boolean(String(form.mission).trim()) && Boolean(form.lead_profile) && Boolean(form.board_slug);
+}
+function onboardBody(form) {
+  return {
+    project_id: form.project_id,
+    name: String(form.name ?? "").trim(),
+    repo_path: String(form.repo_path).trim(),
+    mission: String(form.mission).trim(),
+    lead_profile: form.lead_profile,
+    board_slug: form.board_slug,
+    autonomy_level: Number(form.autonomy_level)
+  };
+}
+
+// hermes_dockyard_plugin/desktop/src/fleet/ui.js
+var enc = encodeURIComponent;
+var message = (failure) => String(failure?.message ?? failure);
+var read = (path) => path ? api(path).then((data) => ({ data }), (failure) => ({ error: message(failure) })) : {};
+async function fleetRead(main, extra) {
+  let health;
+  try {
+    health = await api("/health");
+  } catch (failure) {
+    return { mode: probeMode(failure), error: message(failure) };
+  }
+  if (health?.fleet !== true) return { mode: "vanilla" };
+  const [first, second] = await Promise.all([read(main), read(extra)]);
+  return first.error ? { mode: "unavailable", error: first.error } : { mode: "fleet", data: first.data, extra: second.data, extraError: second.error };
+}
+function useEscape(busy, onCancel) {
+  useEffect(() => {
+    const close = (event) => {
+      if (event.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [busy, onCancel]);
+}
+function Modal({ marker, label, busy, onCancel, children }) {
+  useDialogFocusManager(`[${marker}]`);
+  useEscape(busy, onCancel);
+  return jsx("section", {
+    className: "dockyard-modal-layer",
+    [marker]: true,
+    onClick: (event) => {
+      if (event.target === event.currentTarget && !busy) onCancel();
+    },
+    children: jsxs("div", { className: "dockyard-modal", role: "dialog", "aria-modal": true, "aria-label": label, children })
+  });
+}
+function OwnerDialog({ initiative, profiles = [], entry = {}, approve = false, busy = false, onCancel, onConfirm }) {
+  const [owner, setOwner] = useState(entry.owner || entry.owner_hint || "");
+  const action = approve ? "Approve and dispatch" : "Dispatch";
+  return jsxs(Modal, { marker: "data-fleet-owner-dialog", label: `${action} ${initiative.ref}`, busy, onCancel, children: [
+    jsx("h2", { children: `${approve ? "Approve" : "Assign an owner to"} ${initiative.ref}` }),
+    jsx("p", { children: `${initiative.title ? `${initiative.title}. ` : ""}${approve ? `Approval checks the owner against the dispatcher's profiles first, binds it to ${initiative.project_id || "its project"}'s own board with its Implement card assigned to the owner, then moves that card to ready with a context comment, so the dispatcher starts it.` : `Binds it, if needed, to ${initiative.project_id || "its project"}'s own board, then assigns its Implement card to the owner with a context comment and moves it to ready, so the dispatcher starts it.`} Validate and Outcome-check cards stay unassigned.` }),
+    profiles.length ? null : jsx("p", { className: "dockyard-inline-error", role: "alert", children: "No profile can be dispatched: the root config's kanban.dispatch_profiles names none that exist." }),
+    entry.owner_named && !entry.owner_hint ? jsx("p", { className: "dockyard-meta", children: `The proposal names ${entry.owner_named}, which the root dispatcher does not run. Choose an owner.` }) : null,
+    jsxs("div", { className: "dockyard-work-editor", children: [
+      jsx("label", { htmlFor: "dockyard-fleet-owner", children: "Owner" }),
+      jsxs("select", { id: "dockyard-fleet-owner", "data-field": "fleet-owner", value: owner, disabled: busy, onChange: (event) => setOwner(event.target.value), children: [
+        jsx("option", { value: "", children: "Choose a profile" }),
+        ...[...new Set(profiles)].map((name) => jsx("option", { value: name, children: name }, name))
+      ] })
+    ] }),
+    jsxs("div", { className: "dockyard-modal-actions", children: [
+      jsx(Button, { disabled: busy, onClick: onCancel, children: "Cancel" }),
+      jsx(Button, { action: approve ? "fleet-approve-dispatch" : "fleet-dispatch", variant: "primary", disabled: busy || !owner, onClick: () => onConfirm(owner), children: busy ? "Dispatching..." : action })
+    ] })
+  ] });
+}
+async function dispatchOwner({ ref, projectId, owner, approved = false }) {
+  try {
+    const result = await api(`/initiatives/${enc(ref)}/dispatch`, { method: "POST", body: { owner, project_id: projectId || null }, quiet: true });
+    emitToast("success", dispatchMessage(ref, result, approved));
+    return result;
+  } catch (failure) {
+    emitToast("danger", `${approved ? `Approved ${ref}, but dispatching` : `${ref}: dispatching`} it to ${owner} failed: ${message(failure)}. It still needs an owner (Dashboard, Needs you now).`);
+    return null;
+  }
+}
+function WaitDialog({ initiative, record, busy, onCancel, onSave }) {
+  const [form, setForm] = useState(() => Object.fromEntries(WAIT_FIELDS.map((key) => [key, record?.[key] ?? ""])));
+  const field = (key, label, extra = {}) => [
+    jsx("label", { htmlFor: `dockyard-fleet-wait-${key}`, children: label }, `${key}-label`),
+    jsx(extra.rows ? "textarea" : "input", {
+      id: `dockyard-fleet-wait-${key}`,
+      "data-field": `wait-${key}`,
+      value: form[key],
+      disabled: busy,
+      onChange: (event) => setForm((current) => ({ ...current, [key]: event.target.value })),
+      ...extra
+    }, key)
+  ];
+  return jsxs(Modal, { marker: "data-fleet-wait-dialog", label: `Waiting on \xB7 ${initiative.ref}`, busy, onCancel, children: [
+    jsx("h2", { children: `Waiting on \xB7 ${initiative.ref}` }),
+    jsx("p", { children: "While the wait is current its lead does not re-propose or re-diagnose it; nothing is hidden from health, alarms, Needs you or the digest. Recheck at most 14 days out." }),
+    jsxs("div", { className: "dockyard-work-editor", children: [
+      ...field("who", "Waiting on", { placeholder: "External party, or the owner" }),
+      ...field("reference", "Reference", { placeholder: "Case, ticket or submission id, or URL" }),
+      ...field("expected_by", "Expected by", { type: "date" }),
+      ...field("recheck_after", "Recheck after", { type: "date" }),
+      ...field("note", "Note", { rows: 3 })
+    ] }),
+    jsxs("div", { className: "dockyard-modal-actions", children: [
+      jsx(Button, { disabled: busy, onClick: onCancel, children: "Cancel" }),
+      jsx(Button, { action: "fleet-save-wait", variant: "primary", disabled: busy || !waitValid(form), onClick: () => onSave(form), children: busy ? "Saving..." : "Save wait" })
+    ] })
+  ] });
+}
+function ClearDialog({ initiative, suggested, busy, onCancel, onConfirm }) {
+  return jsxs(Modal, { marker: "data-fleet-clear-wait", label: `Clear the wait on ${initiative.ref}`, busy, onCancel, children: [
+    jsx("h2", { children: suggested ? `Dismiss the suggested wait on ${initiative.ref}?` : `Clear the wait on ${initiative.ref}?` }),
+    jsx("p", { children: suggested ? "The suggestion is discarded." : "Its lead proposes and investigates it again from the next cycle." }),
+    jsxs("div", { className: "dockyard-modal-actions", children: [
+      jsx(Button, { disabled: busy, onClick: onCancel, children: "Cancel" }),
+      jsx(Button, { action: "fleet-clear-wait", variant: "danger", disabled: busy, onClick: onConfirm, children: busy ? "Clearing..." : suggested ? "Dismiss" : "Clear" })
+    ] })
+  ] });
+}
+function FleetWait({ initiative, waiting, suggested, prefill, onChanged }) {
+  const [editing, setEditing] = useState(null);
+  const [clearing, setClearing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const post = async (body, done) => {
+    setBusy(true);
+    try {
+      await api(`/initiatives/${enc(initiative.ref)}/waiting`, { method: "POST", body, quiet: true });
+      emitToast("success", done);
+      setEditing(null);
+      setClearing(false);
+      onChanged?.();
+    } catch (failure) {
+      emitToast("danger", `The wait on ${initiative.ref} was not saved. ${message(failure)}`);
+    }
+    setBusy(false);
+  };
+  const save2 = (record) => post(waitBody(initiative.project_id, record), `${initiative.ref} waiting on ${String(record.who).trim()}`);
+  const clear = () => post(
+    { state: "cleared", project_id: initiative.project_id, reason: suggested && !waiting ? "suggestion dismissed in Dockyard" : "cleared in Dockyard" },
+    `${suggested && !waiting ? "Suggested wait dismissed on" : "Wait cleared on"} ${initiative.ref}`
+  );
+  const actions = waiting ? [
+    jsx(Button, { small: true, action: "fleet-update-wait", disabled: busy, onClick: () => setEditing(waiting), children: "Update wait" }, "u"),
+    jsx(Button, { small: true, variant: "quiet", action: "fleet-open-clear-wait", disabled: busy, onClick: () => setClearing(true), children: "Clear wait" }, "x")
+  ] : suggested ? [
+    jsx(Button, { small: true, variant: "primary", action: "fleet-confirm-wait", disabled: busy, onClick: () => save2(suggested), children: "Confirm wait" }, "y"),
+    jsx(Button, { small: true, action: "fleet-edit-wait", disabled: busy, onClick: () => setEditing(suggested), children: "Edit" }, "e"),
+    jsx(Button, { small: true, variant: "quiet", action: "fleet-open-clear-wait", disabled: busy, onClick: () => setClearing(true), children: "Dismiss" }, "n")
+  ] : [jsx(Button, { small: true, action: "fleet-set-wait", disabled: busy, onClick: () => setEditing(prefill ?? {}), children: "Set waiting" }, "w")];
+  return jsxs("div", { className: "dockyard-fleet-wait", "data-fleet-wait": initiative.ref, children: [
+    waiting ? jsx(StatusTag, { tone: waitTone(waiting), label: waitStatus(waiting) }) : null,
+    waiting ? jsx("p", { children: `On ${waitText(waiting)}, recheck after ${waiting.recheck_after}.` }) : null,
+    waiting ? jsx("p", { className: "dockyard-meta", children: `${waiting.note ? `${waiting.note} \xB7 ` : ""}set by ${waiting.set_by} ${formatWhen(waiting.set_at)}` }) : null,
+    !waiting && suggested ? jsx(StatusTag, { tone: "warning", label: "Wait suggested" }) : null,
+    !waiting && suggested ? jsx("p", { children: `${suggested.set_by} suggests waiting on ${waitText(suggested)}.` }) : null,
+    !waiting && suggested?.evidence ? jsx("p", { className: "dockyard-meta", children: `Evidence: ${suggested.evidence}` }) : null,
+    !waiting && !suggested && prefill?.who ? jsx("p", { className: "dockyard-meta", children: `Suggested from the card: waiting on ${waitText(prefill)}` }) : null,
+    !waiting && !suggested && !prefill?.who ? jsx("p", { className: "dockyard-meta", children: "Not waiting on anyone outside the fleet." }) : null,
+    jsx("div", { className: "dockyard-form-actions", children: actions }),
+    editing ? jsx(WaitDialog, { initiative, record: editing, busy, onCancel: () => setEditing(null), onSave: save2 }) : null,
+    clearing ? jsx(ClearDialog, { initiative, suggested: Boolean(suggested && !waiting), busy, onCancel: () => setClearing(false), onConfirm: clear }) : null
+  ] });
+}
+function useFleetDecision(ref) {
+  const [state, setState] = useState({ mode: "loading" });
+  const [version, setVersion] = useState(0);
+  const [ownerOpen, setOwnerOpen] = useState(false);
+  useEffect(() => {
+    let current = true;
+    setState({ mode: "loading" });
+    setOwnerOpen(false);
+    fleetRead("/dispatch", "/waiting").then((result) => {
+      if (!current) return;
+      if (result.mode !== "fleet") {
+        setState(result);
+        return;
+      }
+      setState({
+        mode: "fleet",
+        profiles: result.data?.profiles ?? [],
+        entry: (result.data?.initiatives ?? []).find((row) => row.ref === ref) ?? {},
+        waiting: result.extra?.waiting?.[ref] ?? null,
+        suggested: result.extra?.suggested?.[ref] ?? null,
+        waitError: result.extraError ?? null
+      });
+    });
+    return () => {
+      current = false;
+    };
+  }, [ref, version]);
+  return { ...state, ownerOpen, setOwnerOpen, blocked: state.mode === "loading" || state.mode === "unavailable", reload: () => setVersion((value) => value + 1) };
+}
+function FleetApproval({ item, decision, fleet, busy, onApprove }) {
+  if (fleet.mode === "unavailable") {
+    return jsx("p", {
+      className: "dockyard-inline-error",
+      role: "alert",
+      "data-fleet-owner-error": true,
+      children: `Owner list unavailable: ${fleet.error}. This fleet names an owner on approval; refresh before approving.`
+    });
+  }
+  if (fleet.mode !== "fleet") return null;
+  const initiative = { ref: item.ref, title: decision?.title ?? item.title, project_id: decision?.project_id ?? item.project };
+  return jsxs(Fragment, { children: [
+    jsxs("section", { className: "dockyard-inbox-section", "data-fleet-waiting-section": true, children: [
+      jsx("h3", { children: "Waiting on" }),
+      fleet.waitError ? jsx("p", { className: "dockyard-inline-error", role: "alert", children: `Waiting records unavailable: ${fleet.waitError}` }) : null,
+      jsx(FleetWait, { initiative, waiting: fleet.waiting, suggested: fleet.suggested, onChanged: fleet.reload })
+    ] }),
+    fleet.ownerOpen ? jsx(OwnerDialog, {
+      initiative,
+      profiles: fleet.profiles,
+      entry: fleet.entry,
+      approve: true,
+      busy,
+      onCancel: () => fleet.setOwnerOpen(false),
+      onConfirm: async (owner) => {
+        await onApprove(owner);
+        fleet.setOwnerOpen(false);
+      }
+    }) : null
+  ] });
+}
+function useFleetNeeds(view) {
+  const [state, setState] = useState({ mode: "loading" });
+  useEffect(() => {
+    let current = true;
+    fleetRead("/dispatch", "/needs-you").then((result) => {
+      if (!current) return;
+      setState(result.mode !== "fleet" ? result : {
+        mode: "fleet",
+        dispatch: result.data ?? {},
+        queue: result.extra ?? { items: [], waiting: {}, suggested: {}, errors: [] },
+        errors: result.extraError ? [result.extraError] : result.extra?.errors ?? []
+      });
+    });
+    return () => {
+      current = false;
+    };
+  }, [view]);
+  return state;
+}
+function FleetNeedsErrors({ fleet }) {
+  const errors = fleet?.mode === "fleet" ? fleet.errors : fleet?.mode === "unavailable" ? [fleet.error] : [];
+  if (!errors.length) return null;
+  return jsx("div", { "data-fleet-needs-errors": true, children: errors.map((error, index) => jsx("p", { className: "dockyard-inline-error dockyard-command-empty", role: "alert", children: `Needs you: ${error}` }, index)) });
+}
+function FleetNeedPanel({ item, fleet, onChanged }) {
+  const [owning, setOwning] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const need = needFor(item, fleet);
+  if (!need) return null;
+  if (need.kind === "resolved") return jsx("p", { className: "dockyard-meta", "data-fleet-need": "resolved", children: "No longer in the Needs-you queue." });
+  const initiative = { ref: need.ref, title: need.title, project_id: need.project_id };
+  const facts = [
+    need.card_id ? `card ${need.card_id} on ${need.board}${need.card_title && need.card_title !== need.title ? ` \xB7 ${need.card_title}` : ""}` : null,
+    need.kind === "blocked_card" ? `${need.assignee ? `assigned to ${need.assignee}` : "unassigned"}${need.block_kind ? ` \xB7 ${String(need.block_kind).replaceAll("_", " ")}` : ""}` : null,
+    need.task_id && !need.card_id ? `Implement card ${need.task_id}` : null
+  ].filter(Boolean).join(" \xB7 ");
+  const dispatch = async (owner) => {
+    setBusy(true);
+    const result = await dispatchOwner({ ref: need.ref, projectId: need.project_id, owner });
+    setBusy(false);
+    if (result) {
+      setOwning(false);
+      onChanged?.();
+    }
+  };
+  return jsxs("div", { className: "dockyard-fleet-need", "data-fleet-need": need.kind, style: { minWidth: 0, overflowWrap: "anywhere" }, children: [
+    facts ? jsx("p", { className: "dockyard-meta", children: facts }) : null,
+    need.kind !== "approval" && need.detail ? jsx("p", { children: need.detail }) : null,
+    need.steps ? jsx("h4", { children: need.steps_from ? `Steps from ${need.steps_from}` : need.kind === "wait_suggested" ? "Evidence" : "Note" }) : null,
+    need.steps ? jsx("p", { style: { whiteSpace: "pre-wrap" }, children: need.steps }) : null,
+    need.kind === "undispatched" ? jsx(Button, { variant: "primary", action: "fleet-open-dispatch", onClick: () => setOwning(true), children: "Dispatch" }) : null,
+    need.ref ? jsx("h4", { children: "Waiting on" }) : null,
+    need.ref ? jsx(FleetWait, {
+      initiative,
+      waiting: fleet.queue.waiting?.[need.ref] ?? null,
+      suggested: fleet.queue.suggested?.[need.ref] ?? null,
+      prefill: need.suggestion,
+      onChanged
+    }, need.ref) : null,
+    owning ? jsx(OwnerDialog, {
+      initiative,
+      profiles: fleet.dispatch.profiles ?? [],
+      busy,
+      onCancel: () => setOwning(false),
+      onConfirm: dispatch,
+      entry: (fleet.dispatch.initiatives ?? []).find((row) => row.ref === need.ref) ?? {}
+    }) : null
+  ] });
+}
+var BLANK = Object.freeze({ project_id: "", name: "", repo_path: "", mission: "", lead_profile: "", board_slug: "", autonomy_level: "2" });
+function BindOnlyWizard({ intent, options, error: loadError, onRetry, onClose, onComplete }) {
+  useDialogFocusManager("[data-onboarding-wizard]");
+  const [form, setForm] = useState(BLANK);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  useEscape(submitting, onClose);
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const boards = boardsFor(options?.boards, form.project_id);
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    const body = onboardBody(form);
+    try {
+      const result = await api("/onboard", { method: "POST", body, suppressErrorToast: true });
+      onComplete({ ...result, project_id: result?.project_id ?? body.project_id });
+    } catch (failure) {
+      setError(message(failure));
+      setSubmitting(false);
+    }
+  };
+  const input = (key, label, props = {}) => [
+    jsx("label", { htmlFor: `dockyard-fleet-onboard-${key}`, children: label }, `${key}-label`),
+    jsx(props.rows ? "textarea" : "input", { id: `dockyard-fleet-onboard-${key}`, "data-field": key.replaceAll("_", "-"), value: form[key], autoComplete: "off", disabled: submitting, onChange: set(key), ...props }, key)
+  ];
+  const select = (key, label, choices, placeholder) => [
+    jsx("label", { htmlFor: `dockyard-fleet-onboard-${key}`, children: label }, `${key}-label`),
+    jsxs("select", { id: `dockyard-fleet-onboard-${key}`, "data-field": key.replaceAll("_", "-"), value: form[key], disabled: submitting, onChange: set(key), children: [
+      placeholder ? jsx("option", { value: "", children: placeholder }) : null,
+      ...choices.map(([value, text2]) => jsx("option", { value, children: text2 }, value))
+    ] }, key)
+  ];
+  return jsx("div", {
+    className: "dockyard-modal-backdrop",
+    children: jsxs("section", {
+      className: "dockyard-onboarding",
+      role: "dialog",
+      "aria-modal": true,
+      "aria-labelledby": "dockyard-onboarding-title",
+      "data-onboarding-wizard": true,
+      "data-onboarding-intent": intent === "existing" ? "existing" : "new",
+      "data-fleet-onboarding": "bind-only",
+      children: [
+        jsxs("header", { className: "dockyard-onboarding-head", children: [
+          jsxs("div", { children: [
+            jsx("span", { className: "dockyard-card-label", children: intent === "existing" ? "EXISTING PROJECT" : "NEW PROJECT" }),
+            jsx("h2", { id: "dockyard-onboarding-title", children: "Bring a project into Project Stewardship" }),
+            jsx("p", { children: "Bind-only: enables stewardship and binds a native Hermes project to an existing Kanban board in the Hermes root." })
+          ] }),
+          jsx("button", { type: "button", className: "dockyard-modal-close", "aria-label": "Close onboarding", disabled: submitting, onClick: onClose, children: "\xD7" })
+        ] }),
+        jsx("div", { className: "dockyard-wizard-body", children: jsxs("div", { className: "dockyard-wizard-step active", "data-wizard-step": "bind", children: [
+          intent === "existing" ? null : jsx("p", {
+            className: "dockyard-review-note",
+            "data-fleet-new-project-guard": true,
+            children: "This fleet never creates Kanban boards, so a new project is bound like an existing one. Create its board in the Hermes root first (hermes kanban boards create <slug>), then choose it below."
+          }),
+          loadError ? jsxs("div", { children: [
+            jsx("p", { className: "dockyard-inline-error", role: "alert", "data-discovery-failed": true, children: `Boards and profiles unavailable: ${loadError}. Onboarding stays closed until the host answers.` }),
+            jsx(Button, { action: "refresh-onboarding-discovery", small: true, onClick: onRetry, children: "Retry" })
+          ] }) : null,
+          ...input("project_id", "Project ID", { placeholder: "payments-relaunch" }),
+          jsx("small", { children: form.project_id && !SLUG.test(form.project_id) ? "Must be lowercase letters, digits, '-' or '_'." : "Lowercase letters, digits, hyphens and underscores." }),
+          ...input("name", "Display name (optional)"),
+          ...input("repo_path", "Repository path", { placeholder: "/opt/data/.../repos/<repo>" }),
+          jsx("small", { children: "An existing git checkout inside the Hermes root." }),
+          ...input("mission", "Mission", { rows: 4, placeholder: "Reduce payment failures without weakening release gates." }),
+          ...select("lead_profile", "Lead profile", (options?.profiles ?? []).map((name) => [name, name]), "Select a lead profile"),
+          ...select(
+            "board_slug",
+            "Existing board",
+            boards.map((board) => [board.slug, `${board.slug}${board.name && board.name !== board.slug ? ` \xB7 ${board.name}` : ""}${board.project ? " (bound)" : ""}`]),
+            boards.length ? "Choose a board" : "No unbound boards"
+          ),
+          ...select("autonomy_level", "Autonomy level", ["0", "1", "2", "3"].map((level) => [level, level]))
+        ] }) }),
+        error ? jsx("p", { className: "dockyard-inline-error", role: "alert", children: error }) : null,
+        jsxs("footer", { className: "dockyard-wizard-actions", children: [
+          jsx(Button, { action: "cancel-onboarding", disabled: submitting, onClick: onClose, children: "Cancel" }),
+          jsx(Button, {
+            action: "submit-onboarding",
+            variant: "primary",
+            disabled: submitting || !options || !onboardValid(form),
+            onClick: submit,
+            children: submitting ? "Onboarding\u2026" : "Bind and onboard"
+          })
+        ] })
+      ]
+    })
+  });
+}
+function FleetOnboarding(props) {
+  const [state, setState] = useState({ mode: "loading" });
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let current = true;
+    fleetRead("/onboard/options").then((result) => {
+      if (current) setState(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, [version]);
+  if (state.mode === "loading") return null;
+  if (state.mode === "vanilla") return jsx(OnboardingWizard, props);
+  return jsx(BindOnlyWizard, { ...props, options: state.data ?? null, error: state.mode === "unavailable" ? state.error : null, onRetry: () => setVersion((value) => value + 1) });
+}
+async function refuseOwnerlessApprove() {
+  const { mode } = await fleetRead();
+  if (mode === "vanilla") return;
+  emitToast("danger", "Approve this initiative from the Approval Inbox: this fleet names an owner on approval.");
+  throw new Error("approval needs an owner");
+}
+
 // hermes_dockyard_plugin/desktop/src/work-item/approvals.js
 var decisionText = (value) => {
   if (value == null || value === "") return "Not supplied";
@@ -7526,6 +8000,7 @@ function ApprovalDetail({ item, onResolved, onBack }) {
   const [rejectReason, setRejectReason] = useState("");
   const [changesOpen, setChangesOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const fleet = useFleetDecision(item.ref);
   useEffect(() => {
     let current = true;
     setDecision(null);
@@ -7561,30 +8036,36 @@ function ApprovalDetail({ item, onResolved, onBack }) {
     }
     setReceipts(rows);
   };
-  const finish = (message) => {
-    emitToast("success", message);
+  const finish = (message2) => {
+    emitToast("success", message2);
     onResolved(item.ref);
   };
-  const decide = async (action) => {
+  const decide = async (action, owner = null) => {
     if (!decision) return;
     setState(action === "approve" ? "approving" : "rejecting");
     setError(null);
     const expected = action === "approve" ? "approved" : "rejected";
     try {
       const body = action === "reject" ? { expected_fingerprint: decision.fingerprint, reason: rejectReason.trim() } : { expected_fingerprint: decision.fingerprint };
+      if (owner) body.assignee = owner;
       await api(`/initiatives/${encodeURIComponent(item.ref)}/${action}`, {
         method: "POST",
         body,
         suppressErrorToast: true
       });
       await confirmReceipt(expected);
+      if (owner) {
+        await dispatchOwner({ ref: item.ref, projectId: decision.project_id ?? item.project, owner, approved: true });
+        onResolved(item.ref);
+        return;
+      }
       finish(action === "approve" ? "Approved; confirmed by decision receipt" : "Rejected; confirmed by decision receipt");
     } catch (failure) {
       setState("failed");
       setRejectOpen(false);
-      const message = `${action === "approve" ? "Approve" : "Reject"} could not be confirmed. ${String(failure?.message ?? failure)}`;
-      setError(message);
-      emitToast("danger", message);
+      const message2 = `${action === "approve" ? "Approve" : "Reject"} could not be confirmed. ${String(failure?.message ?? failure)}`;
+      setError(message2);
+      emitToast("danger", message2);
     }
   };
   const requestChanges = async () => {
@@ -7601,9 +8082,9 @@ function ApprovalDetail({ item, onResolved, onBack }) {
       finish("Returned to the proposer with your feedback");
     } catch (failure) {
       setState("failed");
-      const message = `Request changes could not be confirmed. ${String(failure?.message ?? failure)}`;
-      setError(message);
-      emitToast("danger", message);
+      const message2 = `Request changes could not be confirmed. ${String(failure?.message ?? failure)}`;
+      setError(message2);
+      emitToast("danger", message2);
     }
   };
   const addComment = async () => {
@@ -7683,8 +8164,9 @@ function ApprovalDetail({ item, onResolved, onBack }) {
         ] })
       ] }) : null,
       error ? jsx("p", { className: "dockyard-inline-error", role: "alert", children: error }) : null,
+      jsx(FleetApproval, { item, decision, fleet, busy, onApprove: (owner) => decide("approve", owner) }),
       jsxs("footer", { className: "dockyard-inbox-actions", children: [
-        jsx(Button, { action: "approve", variant: "primary", disabled: busy || !decision, onClick: () => decide("approve"), children: state === "approving" ? "Approving..." : "Approve" }),
+        jsx(Button, { action: "approve", variant: "primary", disabled: busy || !decision || fleet.blocked, onClick: () => fleet.mode === "fleet" ? fleet.setOwnerOpen(true) : decide("approve"), children: state === "approving" ? "Approving..." : "Approve" }),
         jsx(Button, { action: "reject", variant: "danger", disabled: busy || !decision, onClick: () => setRejectOpen(true), children: "Reject" }),
         jsx(Button, { action: "request-changes", variant: "quiet", disabled: busy || !decision, onClick: () => setChangesOpen((open) => !open), children: "Request changes" }),
         jsx("span", { className: "spacer" }),
@@ -9489,8 +9971,8 @@ function BacklogView({ view, onRefresh, preset }) {
     return allItems.filter((candidate) => candidate.ref !== excludeRef && !descendants.has(candidate.ref) && parentAccepts(candidate.type, type));
   };
   const statusChoicesFor = (item) => STATUS_OPTIONS.filter((status) => item?.type !== "epic" || status !== "done");
-  const flashCell = (ref, field, message) => {
-    setCellError({ ref, field, message });
+  const flashCell = (ref, field, message2) => {
+    setCellError({ ref, field, message: message2 });
   };
   const patchItem = async (ref, patch, okMessage) => {
     const item = workByRef[ref];
@@ -10337,14 +10819,14 @@ function docToPlain(doc) {
   return lines.join("\n").trim();
 }
 function serverJsonBytes(value) {
-  const enc2 = new TextEncoder();
+  const enc3 = new TextEncoder();
   const size = (v, top = false) => {
     if (Array.isArray(v)) return 2 + v.reduce((n, x) => n + size(x), 0) + Math.max(0, v.length - 1) * 2;
     if (v && typeof v === "object") {
       const keys = Object.keys(v).filter((k) => v[k] !== void 0 && (!top || v[k] !== null && v[k] !== ""));
-      return 2 + keys.reduce((n, k) => n + enc2.encode(JSON.stringify(k)).length + 2 + size(v[k]), 0) + Math.max(0, keys.length - 1) * 2;
+      return 2 + keys.reduce((n, k) => n + enc3.encode(JSON.stringify(k)).length + 2 + size(v[k]), 0) + Math.max(0, keys.length - 1) * 2;
     }
-    return enc2.encode(JSON.stringify(v ?? null)).length;
+    return enc3.encode(JSON.stringify(v ?? null)).length;
   };
   return size(value, true);
 }
@@ -11317,9 +11799,9 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
   useEffect(() => {
     const root = stageRef.current?.closest?.(".dockyard-root");
     if (!root) return void 0;
-    const read = () => setHostTheme(root.getAttribute("data-theme") === "dark" ? "dark" : "light");
-    read();
-    const watcher = new MutationObserver(read);
+    const read2 = () => setHostTheme(root.getAttribute("data-theme") === "dark" ? "dark" : "light");
+    read2();
+    const watcher = new MutationObserver(read2);
     watcher.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
     return () => watcher.disconnect();
   }, []);
@@ -11779,12 +12261,12 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
       return true;
     } catch (failure) {
       if (boardRef.current !== at) return false;
-      const message = failureText2(failure);
-      if (/\b409\b|conflict|board_locked|read-only/i.test(message)) {
+      const message2 = failureText2(failure);
+      if (/\b409\b|conflict|board_locked|read-only/i.test(message2)) {
         try {
           const fresh = await api(canvasRoute);
           if (boardRef.current !== at) return false;
-          if (CANVAS_READ_ONLY.includes(fresh.status ?? "draft") || /board_locked|read-only/i.test(message)) {
+          if (CANVAS_READ_ONLY.includes(fresh.status ?? "draft") || /board_locked|read-only/i.test(message2)) {
             mergeMeta(fresh);
             refreshBoards();
             setNotice({ tone: "danger", text: `Not saved \u2014 this board is now ${CANVAS_BOARD_STATUS_LABELS[fresh.status] ?? fresh.status} and read-only. Your edits are still here: move the board back to Plan made (or restore it), then Save.` });
@@ -11797,10 +12279,10 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
             setNotice({ tone: "danger", text: `Revision conflict \u2014 this canvas changed elsewhere and was reloaded at revision ${fresh.revision}. Your unsaved edit was not applied.` });
           }
         } catch (reloadFailure) {
-          setNotice({ tone: "danger", text: `Canvas save failed: ${message}` });
+          setNotice({ tone: "danger", text: `Canvas save failed: ${message2}` });
         }
       } else {
-        setNotice({ tone: "danger", text: `Canvas save failed: ${message}` });
+        setNotice({ tone: "danger", text: `Canvas save failed: ${message2}` });
       }
       return false;
     } finally {
@@ -12231,7 +12713,7 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
       setNotice({ tone: "ok", text: `Removed ${ids.length} object(s) locally \u2014 Save canvas to persist.` });
     }
   };
-  const curate = async (message = null) => {
+  const curate = async (message2 = null) => {
     if (readOnly) {
       setNotice({ tone: "danger", text: `This board is ${CANVAS_BOARD_STATUS_LABELS[boardStatus]} \u2014 reopen it to ask the steward.` });
       return;
@@ -12245,7 +12727,7 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     setChatPill(false);
     setChatBusy(true);
     try {
-      const result = await api(`${canvasRoute}/sessions`, { method: "POST", body: message ? { message } : {} });
+      const result = await api(`${canvasRoute}/sessions`, { method: "POST", body: message2 ? { message: message2 } : {} });
       if (token !== chatToken.current || boardRef.current !== at) return;
       setSession(result);
       refreshMeta(at);
@@ -12595,7 +13077,7 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     jsx("div", { className: "dy-pc-msg bot", children: assistantSummary }, "summary"),
     jsx("div", { "data-canvas-chat-log": true, ref: (node) => {
       if (node) node.lastElementChild?.scrollIntoView?.({ block: "nearest" });
-    }, children: (chatLog ?? []).map((message, index) => jsx("div", { className: `dy-pc-msg ${message.role}`, children: message.text }, `chat-${index}`)) }, "log"),
+    }, children: (chatLog ?? []).map((message2, index) => jsx("div", { className: `dy-pc-msg ${message2.role}`, children: message2.text }, `chat-${index}`)) }, "log"),
     questionBlock ? jsx("div", { children: questionBlock }, "question") : null,
     review ? jsx("p", { className: "dy-pc-drawer-meta", "data-canvas-review": true, children: `Review: ${number(review.summary?.evidence_count)} evidence, ${number(review.summary?.claim_count)} claim, ${number(review.summary?.question_count)} question, ${number(review.summary?.plan_block_count)} plan block(s).` }, "review") : null,
     proposalCards.length ? jsx("div", { "data-canvas-proposals": true, children: proposalCards }, "proposals") : null,
@@ -13209,6 +13691,7 @@ var ISSUE_FILTERS = Object.freeze([
 ]);
 var HEALTH_STATES = Object.freeze(["on_track", "at_risk", "stalled", "idle", "unlinked"]);
 function issueLabels(item) {
+  if (item?.fleet) return fleetIssueLabels(item);
   if (item?.kind === "initiative_approval") {
     return { tag: "Approval", tone: "approval", impact: `Risk: ${readableLabel(item.risk)}`, open: "Review approval" };
   }
@@ -13220,7 +13703,8 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
   const projects = [...view.portfolio?.projects ?? []].sort((left, right) => (STATUS_PRIORITY[left.status] ?? 3) - (STATUS_PRIORITY[right.status] ?? 3));
   const decisions = view.groups?.decisions ?? [];
   const interventions = view.groups?.interventions ?? [];
-  const rows = [...decisions, ...interventions].sort((a, b) => (b.age_days ?? 0) - (a.age_days ?? 0));
+  const fleet = useFleetNeeds(view);
+  const rows = withFleetRows([...decisions, ...interventions], fleet, projects.map((project) => project.project_id)).sort((a, b) => (b.age_days ?? 0) - (a.age_days ?? 0));
   const [selected, setSelected] = useState(null);
   const [subview, setSubview] = useState("overview");
   const [directoryQuery, setDirectoryQuery] = useState("");
@@ -13469,6 +13953,7 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
                 jsx("span", { children: "Impact" }),
                 jsx("span", { children: "Waiting" })
               ] }),
+              jsx(FleetNeedsErrors, { fleet }),
               rows.length ? rows.map((item, index) => jsxs("button", {
                 type: "button",
                 className: `dockyard-command-row dockyard-command-attention-row${focusItem === item ? " is-selected" : ""}`,
@@ -13520,6 +14005,7 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
             ] }) : null,
             jsx("h4", { children: "Recent activity" }),
             jsx("div", { className: "dockyard-command-detail-activity", children: (view.notifications?.notifications ?? []).filter((note) => note.project === focusItem.project).slice(0, 3).map((note) => jsx("p", { children: `${note.title} \xB7 ${formatWhen(note.created_at)}` }, note.id)) }),
+            jsx(FleetNeedPanel, { item: focusItem, fleet, onChanged: onRefresh }, `${focusItem.kind}:${focusItem.ref || focusItem.title}`),
             jsx(Button, { variant: "primary", onClick: () => focusItem.kind === "initiative_approval" ? onInbox?.() : onOpen?.(focusItem.deep_link), children: issueLabels(focusItem).open })
           ] }) : jsx("p", { children: "Select an item to see its details." })
         ] })
@@ -15575,11 +16061,11 @@ var toCanvasRun = (run) => ({
   }))
 });
 function mountDesktopWorkflowCanvas(host3, projectId, workflowName, definition, runs, handlers = {}) {
-  const read = (value) => typeof value === "function" ? value() : value;
+  const read2 = (value) => typeof value === "function" ? value() : value;
   const fetchRuns = async () => {
-    const mapped = (read(runs) ?? []).map(toCanvasRun);
+    const mapped = (read2(runs) ?? []).map(toCanvasRun);
     if (mapped.length) return mapped;
-    const nodes = (read(definition)?.nodes ?? []).map(toCanvasNode);
+    const nodes = (read2(definition)?.nodes ?? []).map(toCanvasNode);
     return [{ run_key: `definition:${workflowName}`, version: 0, status: "definition", started_at: null, updated_at: null, nodes }];
   };
   return mountWorkflowCanvas(host3, projectId, workflowName, fetchRuns, {
@@ -15733,8 +16219,8 @@ function setSignOff(nodes, wanted, recipe) {
   const after = gate.depends_on.filter((d) => nodes.some((n) => n.id === d));
   return [...nodes.map((n) => n.depends_on.some((d) => after.includes(d)) && !n.human_gate && !after.includes(n.id) ? { ...n, depends_on: [gate.id] } : n), { ...gate, depends_on: after }];
 }
-function practiceRevise(nodes, message, members = []) {
-  const text2 = String(message ?? "").trim();
+function practiceRevise(nodes, message2, members = []) {
+  const text2 = String(message2 ?? "").trim();
   const lower = text2.toLowerCase();
   const repeating = nodes.find((n) => n.loop) ?? nodes.find((n) => !n.human_gate && n.depends_on.length) ?? nodes.find((n) => !n.human_gate);
   const rounds = lower.match(/(\d+)\s*(times|tries|rounds|attempts|goes)/);
@@ -18567,8 +19053,8 @@ function AiSidebar({ members, nodes, workflowTitle, thread, onThread, pinned, on
   }, []);
   const empty = !nodes.length;
   const live = [...thread].reverse().find((e) => e.suggestion?.status === "pending" && sameSteps(e.suggestion.base, nodes)) ?? null;
-  const send = (message = text2) => {
-    const clean = message.trim();
+  const send = (message2 = text2) => {
+    const clean = message2.trim();
     if (!clean) {
       setError("Type what you want first.");
       return;
@@ -18895,6 +19381,7 @@ function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpenLibrary
       // review can never approve something else. Retry re-queues via the
       // canonical work-item transition — never an optimistic local flip.
       onApprove: async (ref) => {
+        await refuseOwnerlessApprove();
         const decision = await api(`/initiatives/${encodeURIComponent(ref)}/decision`);
         await api(`/initiatives/${encodeURIComponent(ref)}/approve`, { method: "POST", body: { expected_fingerprint: decision.fingerprint } });
         await actionsRef.current.loadRuns(workflowName);
@@ -19692,7 +20179,7 @@ function ProjectSettingsPanel({ project, settings, onRefresh, onDirty, onArchive
   const [form, setForm] = useState(buildForm);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState(null);
+  const [message2, setMessage] = useState(null);
   const [pendingLifecycle, setPendingLifecycle] = useState(null);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleState, setLifecycleState] = useState(settings);
@@ -19883,7 +20370,7 @@ function ProjectSettingsPanel({ project, settings, onRefresh, onDirty, onArchive
         ] })
       ] })
     ] }),
-    message ? jsx("p", { className: message.tone === "danger" ? "dockyard-inline-error" : "dockyard-inline-success", role: "status", children: message.text }) : null,
+    message2 ? jsx("p", { className: message2.tone === "danger" ? "dockyard-inline-error" : "dockyard-inline-success", role: "status", children: message2.text }) : null,
     enabled ? jsx("div", {
       className: "dockyard-form-actions",
       children: editing ? jsxs(Fragment, { children: [
@@ -21190,7 +21677,7 @@ function riskLine(risk) {
 }
 
 // hermes_dockyard_plugin/desktop/src/project/plan/plan-data.js
-var enc = encodeURIComponent;
+var enc2 = encodeURIComponent;
 var needsReview = (initiative) => ["pending_approval", "changes_requested"].includes(initiative?.status);
 var isOverdue2 = (milestone, today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)) => Boolean(milestone && !milestone.closed && !milestone.archived && milestone.due && milestone.due < today);
 var isClosed = (item) => item?.kind === "initiative" && CLOSED_STATUSES.includes(item.status);
@@ -21211,7 +21698,7 @@ function statusOf(item) {
   return { tone: GOAL_TONE[item.state] ?? "neutral", label: GOAL_LABEL[item.state] ?? item.state };
 }
 async function loadPlan(projectId) {
-  const p = enc(projectId);
+  const p = enc2(projectId);
   const link = { unlinked: false };
   const [roadmap, initiatives, objectives, goals, milestones, settings, missions, work] = await Promise.all([
     api(`/roadmap?project_id=${p}`),
@@ -21227,7 +21714,7 @@ async function loadPlan(projectId) {
 }
 function buildPlan({ projectId, roadmap, initiatives, objectives, goals, milestones, settings, missions, work }) {
   const project = roadmap?.projects?.[0] ?? null;
-  const read = new Map((project?.initiatives ?? []).map((row) => [row.ref, row]));
+  const read2 = new Map((project?.initiatives ?? []).map((row) => [row.ref, row]));
   const goalRead = new Map((project?.goals ?? []).map((row) => [row.id, row]));
   const linksTo = (field) => {
     const map = /* @__PURE__ */ new Map();
@@ -21301,7 +21788,7 @@ function buildPlan({ projectId, roadmap, initiatives, objectives, goals, milesto
       initiatives: milestoneLinks.get(row.id) ?? []
     })),
     initiatives: (initiatives?.initiatives ?? []).map((row) => {
-      const link = read.get(row.ref);
+      const link = read2.get(row.ref);
       return {
         kind: "initiative",
         id: row.ref,
@@ -21323,7 +21810,7 @@ function buildPlan({ projectId, roadmap, initiatives, objectives, goals, milesto
   };
 }
 function planActions(projectId) {
-  const p = enc(projectId);
+  const p = enc2(projectId);
   const quiet = true;
   return {
     // Checks are the initiative's validation contract. They go in `tests`,
@@ -21336,24 +21823,24 @@ function planActions(projectId) {
       risk: form.risk,
       ...form.checks?.trim() ? { validation_contract: { tests: form.checks.trim() } } : {}
     } }),
-    resubmitInitiative: (ref, form) => api(`/initiatives/${enc(ref)}/resubmit`, { method: "POST", quiet, body: {
+    resubmitInitiative: (ref, form) => api(`/initiatives/${enc2(ref)}/resubmit`, { method: "POST", quiet, body: {
       rationale: form.rationale.trim(),
       expected_outcome: form.expectedOutcome.trim(),
       risk: form.risk
     } }),
     // The proxy vouches for the signed-in person; the body never names them.
-    withdrawInitiative: (ref, reason) => api(`/initiatives/${enc(ref)}/withdraw`, { method: "POST", quiet, body: reason ? { reason } : {} }),
+    withdrawInitiative: (ref, reason) => api(`/initiatives/${enc2(ref)}/withdraw`, { method: "POST", quiet, body: reason ? { reason } : {} }),
     // Same body as the browser dashboard's "Complete with verified outcome".
-    completeInitiative: (ref) => api(`/initiatives/${enc(ref)}/complete`, { method: "POST", quiet, body: { verified: true, regressed: false } }),
+    completeInitiative: (ref) => api(`/initiatives/${enc2(ref)}/complete`, { method: "POST", quiet, body: { verified: true, regressed: false } }),
     createMilestone: (form) => api(`/projects/${p}/milestones`, { method: "POST", quiet, body: { name: form.title.trim(), due: form.due || null } }),
-    renameMilestone: (name, next) => api(`/projects/${p}/milestones/${enc(name)}/rename`, { method: "POST", quiet, body: { new_name: next.trim() } }),
-    updateMilestone: (name, patch) => api(`/projects/${p}/milestones/${enc(name)}`, { method: "PATCH", quiet, body: patch }),
-    archiveMilestone: (name) => api(`/projects/${p}/milestones/${enc(name)}/archive`, { method: "POST", quiet, body: {} }),
-    restoreMilestone: (name) => api(`/projects/${p}/milestones/${enc(name)}/restore`, { method: "POST", quiet, body: {} }),
-    deleteMilestone: (name) => api(`/projects/${p}/milestones/${enc(name)}`, { method: "DELETE", quiet, body: {} }),
-    milestoneDetail: (name) => api(`/projects/${p}/milestones/${enc(name)}`, { quiet }),
-    attachWork: (name, ref) => api(`/projects/${p}/milestones/${enc(name)}/attach`, { method: "POST", quiet, body: { ref } }),
-    detachWork: (name, ref) => api(`/projects/${p}/milestones/${enc(name)}/detach`, { method: "POST", quiet, body: { ref } }),
+    renameMilestone: (name, next) => api(`/projects/${p}/milestones/${enc2(name)}/rename`, { method: "POST", quiet, body: { new_name: next.trim() } }),
+    updateMilestone: (name, patch) => api(`/projects/${p}/milestones/${enc2(name)}`, { method: "PATCH", quiet, body: patch }),
+    archiveMilestone: (name) => api(`/projects/${p}/milestones/${enc2(name)}/archive`, { method: "POST", quiet, body: {} }),
+    restoreMilestone: (name) => api(`/projects/${p}/milestones/${enc2(name)}/restore`, { method: "POST", quiet, body: {} }),
+    deleteMilestone: (name) => api(`/projects/${p}/milestones/${enc2(name)}`, { method: "DELETE", quiet, body: {} }),
+    milestoneDetail: (name) => api(`/projects/${p}/milestones/${enc2(name)}`, { quiet }),
+    attachWork: (name, ref) => api(`/projects/${p}/milestones/${enc2(name)}/attach`, { method: "POST", quiet, body: { ref } }),
+    detachWork: (name, ref) => api(`/projects/${p}/milestones/${enc2(name)}/detach`, { method: "POST", quiet, body: { ref } }),
     createObjective: (form) => api(`/projects/${p}/objectives`, { method: "POST", quiet, body: {
       name: form.title.trim(),
       description: form.description.trim(),
@@ -21376,11 +21863,11 @@ function planActions(projectId) {
       description: form.description.trim(),
       objective_ids: form.objectiveIds
     } }),
-    updateGoal: (id, patch) => api(`/projects/${p}/goals/${enc(id)}`, { method: "PATCH", quiet, body: patch }),
+    updateGoal: (id, patch) => api(`/projects/${p}/goals/${enc2(id)}`, { method: "PATCH", quiet, body: patch }),
     orderGoals: (ids) => api(`/projects/${p}/goals/order`, { method: "PUT", quiet, body: { goal_ids: ids } }),
-    archiveGoal: (id) => api(`/projects/${p}/goals/${enc(id)}/archive`, { method: "POST", quiet, body: {} }),
-    restoreGoal: (id) => api(`/projects/${p}/goals/${enc(id)}/restore`, { method: "POST", quiet, body: {} }),
-    deleteGoal: (id) => api(`/projects/${p}/goals/${enc(id)}`, { method: "DELETE", quiet, body: {} }),
+    archiveGoal: (id) => api(`/projects/${p}/goals/${enc2(id)}/archive`, { method: "POST", quiet, body: {} }),
+    restoreGoal: (id) => api(`/projects/${p}/goals/${enc2(id)}/restore`, { method: "POST", quiet, body: {} }),
+    deleteGoal: (id) => api(`/projects/${p}/goals/${enc2(id)}`, { method: "DELETE", quiet, body: {} }),
     // Batch L: the 0.4.0 link endpoints are retired (410). Placement is a PUT
     // of one parent on the child; a null parent unplaces it.
     linkMilestone: (ref, milestoneId) => api(`/projects/${p}/milestones/${Number(milestoneId)}/initiative`, { method: "PUT", quiet, body: { parent_id: ref } }),
@@ -21391,9 +21878,9 @@ function planActions(projectId) {
     linkObjective: (ref, objectiveId) => api(`/projects/${p}/objectives/${Number(objectiveId)}/milestone`, { method: "PUT", quiet, body: { parent_id: Number(ref) } }),
     unlinkObjective: (ref, objectiveId) => api(`/projects/${p}/objectives/${Number(objectiveId)}/milestone`, { method: "PUT", quiet, body: { parent_id: null } }),
     // A goal has one objective parent (v42): place it, or unplace it.
-    linkGoal: (goalId, objectiveId) => api(`/projects/${p}/goals/${enc(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: Number(objectiveId) } }),
-    unlinkGoal: (goalId) => api(`/projects/${p}/goals/${enc(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
-    unplaceGoal: (goalId) => api(`/projects/${p}/goals/${enc(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
+    linkGoal: (goalId, objectiveId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: Number(objectiveId) } }),
+    unlinkGoal: (goalId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
+    unplaceGoal: (goalId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
     saveMission: (text2) => api(`/projects/${p}/settings`, { method: "PATCH", quiet, body: { mission: text2.trim() } }),
     archiveMission: () => api(`/projects/${p}/mission/archive`, { method: "POST", quiet, body: {} }),
     removeMission: () => api(`/projects/${p}/mission`, { method: "DELETE", quiet, body: {} }),
@@ -21897,12 +22384,12 @@ function MilestoneWork({ milestone, plan, actions, onChanged, readOnly }) {
       current = false;
     };
   }, [milestone.name, milestone.itemRefs.join(",")]);
-  const run = async (work, message) => {
+  const run = async (work, message2) => {
     setBusy(true);
     setFailure(null);
     try {
       await work();
-      emitToast("success", message);
+      emitToast("success", message2);
       setScopeRef("");
       onChanged();
     } catch (error) {
@@ -21960,11 +22447,11 @@ function PlanDrawer({ item, plan, actions, ui, onClose, onChanged }) {
   const open = (kind, id) => () => ui.open({ kind, id });
   const linkButton = (target, label = "+ Link") => live ? jsx(Button, { small: true, action: `plan-link-${target}`, onClick: () => ui.link(item, target), children: label }) : null;
   const unlink = (title, description, run, label = "Unlink") => readOnly ? null : () => ui.confirm({ key: "plan-unlink", title, description, label, done: "Link removed.", run });
-  const act = async (work, message) => {
+  const act = async (work, message2) => {
     setBusy(true);
     try {
       await work();
-      emitToast("success", message);
+      emitToast("success", message2);
       onChanged();
     } catch (error) {
       emitToast("danger", errorText(error));
@@ -22782,8 +23269,8 @@ function ProjectChatMenu({ projectId, lead }) {
   const targets = chatTargets(members, lead);
   if (targets.length === 0) return null;
   const open = async (profile) => {
-    const [tone, message] = chatOutcomeMessage(profile, await openProjectChat({ host, api, projectId, profile }));
-    emitToast(tone, message);
+    const [tone, message2] = chatOutcomeMessage(profile, await openProjectChat({ host, api, projectId, profile }));
+    emitToast(tone, message2);
   };
   return jsx("span", { className: "dy-ov-chat", "data-strip-chat": projectId, children: jsx(Menu, {
     label: `Chat with a bot on ${projectId}`,
@@ -23805,10 +24292,10 @@ function TeamsView({ view, onRefresh }) {
             jsx("div", { className: "dockyard-group-members", children: (group.members ?? []).map((member) => jsx("span", { className: "dockyard-avatar", title: member, children: initials2(member) }, member)) }),
             jsx("div", {
               className: "dockyard-handoff-list",
-              children: (view.messages?.[group.name] ?? []).length > 0 ? view.messages[group.name].map((message, index) => jsxs("div", { children: [
-                jsx("strong", { children: message.payload?.summary || message.msg_type || "A2A event" }),
-                jsx("span", { children: `${message.from_actor || "Unknown actor"} / ${formatWhen(message.created_at)}` })
-              ] }, String(message.id ?? index))) : jsx("span", { className: "dockyard-meta", children: "No handoff messages recorded." })
+              children: (view.messages?.[group.name] ?? []).length > 0 ? view.messages[group.name].map((message2, index) => jsxs("div", { children: [
+                jsx("strong", { children: message2.payload?.summary || message2.msg_type || "A2A event" }),
+                jsx("span", { children: `${message2.from_actor || "Unknown actor"} / ${formatWhen(message2.created_at)}` })
+              ] }, String(message2.id ?? index))) : jsx("span", { className: "dockyard-meta", children: "No handoff messages recorded." })
             })
           ] }, group.name)) : jsx("p", { className: "dockyard-meta", children: "No bot groups configured." })
         })
@@ -23849,11 +24336,11 @@ function TeamsView({ view, onRefresh }) {
           ] }),
           jsx("div", {
             className: "dockyard-transcript-messages",
-            children: (transcript.messages ?? []).map((message, index) => jsxs("div", { className: `dockyard-transcript-message ${message.role}`, "data-transcript-message": message.role, children: [
-              jsxs("div", { children: [jsx("strong", { children: message.tool_name || message.role }), jsx("span", { children: formatWhen(message.timestamp) })] }),
-              jsx("pre", { children: message.content || "(empty message)" }),
-              message.truncated ? jsx("small", { children: "Message truncated at the safe display limit." }) : null
-            ] }, String(message.message_id ?? index)))
+            children: (transcript.messages ?? []).map((message2, index) => jsxs("div", { className: `dockyard-transcript-message ${message2.role}`, "data-transcript-message": message2.role, children: [
+              jsxs("div", { children: [jsx("strong", { children: message2.tool_name || message2.role }), jsx("span", { children: formatWhen(message2.timestamp) })] }),
+              jsx("pre", { children: message2.content || "(empty message)" }),
+              message2.truncated ? jsx("small", { children: "Message truncated at the safe display limit." }) : null
+            ] }, String(message2.message_id ?? index)))
           }),
           jsx("p", { className: "dockyard-transcript-scope", children: transcript.scope_note })
         ] }) : jsx("div", { className: "dockyard-transcript-placeholder", children: sessionState === "loading-transcript" ? "Loading transcript..." : "Select a session to inspect its transcript." })
@@ -25156,12 +25643,12 @@ function GoalCheckEditor({ projectId, goal, onChanged }) {
   }, [projectId, goal.id]);
   const hasCheck = Boolean(detail) || Boolean(evidence.state) && evidence.state !== "no_check";
   const state = STATE_LABEL[evidence.state] ?? words(evidence.state);
-  const run = async (body, message) => {
+  const run = async (body, message2) => {
     setBusy(true);
     setError(null);
     try {
       await api(url, { method: "PUT", body });
-      emitToast("success", message);
+      emitToast("success", message2);
       setOpen(false);
       await load();
       onChanged?.();
@@ -25869,14 +26356,14 @@ function DashboardPage({ inboxCss = "" } = {}) {
     );
   };
   useEffect(() => {
-    const read = () => setHostDark(hostIsDark());
-    const watcher = typeof MutationObserver === "function" ? new MutationObserver(read) : null;
+    const read2 = () => setHostDark(hostIsDark());
+    const watcher = typeof MutationObserver === "function" ? new MutationObserver(read2) : null;
     watcher?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-hermes-mode"] });
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    media?.addEventListener?.("change", read);
+    media?.addEventListener?.("change", read2);
     return () => {
       watcher?.disconnect();
-      media?.removeEventListener?.("change", read);
+      media?.removeEventListener?.("change", read2);
     };
   }, []);
   const appearanceRef = useRef(appearance);
@@ -26334,7 +26821,8 @@ function DashboardPage({ inboxCss = "" } = {}) {
         })
       ] }) : null,
       archivedOpen ? jsx(ArchivedProjectsDialog, { onClose: () => setArchivedOpen(false), onRestored: projectRestored, onCount: setArchivedCount }) : null,
-      onboarding ? jsx(OnboardingWizard, { intent: onboarding, onClose: () => setOnboarding(null), onComplete: completeOnboarding }) : null
+      // Fleet: bind-only onboarding when the fleet backend answers (fleet/ui.js).
+      onboarding ? jsx(FleetOnboarding, { intent: onboarding, onClose: () => setOnboarding(null), onComplete: completeOnboarding }) : null
     ]
   });
 }
