@@ -53,15 +53,7 @@ export function themeMode(themeId, hostDark) {
   return theme.mode === 'auto' ? (hostDark ? 'dark' : 'light') : theme.mode
 }
 
-// Hermes Desktop marks its mode on <html> (data-hermes-mode, class "dark").
-// Outside Hermes (the practice server in a browser) the system setting decides.
-export function hostIsDark() {
-  const html = document.documentElement
-  const mode = html.dataset.hermesMode
-  if (mode === 'dark' || mode === 'light') return mode === 'dark'
-  if (html.classList.contains('dark')) return true
-  return Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches)
-}
+// Hermes Desktop's mode comes from the plugin SDK: see runtime/host-theme.js.
 
 // Hermes Desktop publishes its palette as custom properties on <html>
 // (--dt-*, --theme-*); the web dashboard and a plain browser do not.

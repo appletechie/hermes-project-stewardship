@@ -644,10 +644,11 @@ def test_final_removal_is_bound_to_verified_descriptor(
         nonlocal seen
         verify(row, descriptor)
         try:
-            target = os.readlink(f"/proc/self/fd/{descriptor}")
+            opened = os.fstat(descriptor)
+            target = tombstone.stat()
         except OSError:
             return
-        if target == str(tombstone):
+        if (opened.st_dev, opened.st_ino) == (target.st_dev, target.st_ino):
             seen += 1
             if seen == 2:
                 tombstone.rename(held)

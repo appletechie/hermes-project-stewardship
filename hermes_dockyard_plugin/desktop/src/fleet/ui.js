@@ -268,8 +268,10 @@ export function FleetNeedPanel({ item, fleet, onChanged }) {
   return jsxs('div', { className: 'dockyard-fleet-need', 'data-fleet-need': need.kind, style: { minWidth: 0, overflowWrap: 'anywhere' }, children: [
     facts ? jsx('p', { className: 'dockyard-meta', children: facts }) : null,
     need.kind !== 'approval' && need.detail ? jsx('p', { children: need.detail }) : null,
-    need.steps ? jsx('h4', { children: need.steps_from ? `Steps from ${need.steps_from}` : need.kind === 'wait_suggested' ? 'Evidence' : 'Note' }) : null,
+    need.steps ? jsx('h4', { children: need.kind === 'wait_suggested' ? 'Evidence' : 'Next action' }) : null,
+    need.steps && need.steps_from ? jsx('p', { className: 'dockyard-meta', children: `From ${need.steps_from}` }) : null,
     need.steps ? jsx('p', { style: { whiteSpace: 'pre-wrap' }, children: need.steps }) : null,
+    need.kind === 'blocked_card' && !need.steps ? jsx('p', { children: `Next action not recorded. Ask ${need.assignee || 'the project lead'} to record what will unblock this card.` }) : null,
     need.kind === 'undispatched' ? jsx(Button, { variant: 'primary', action: 'fleet-open-dispatch', onClick: () => setOwning(true), children: 'Dispatch' }) : null,
     need.ref ? jsx('h4', { children: 'Waiting on' }) : null,
     need.ref ? jsx(FleetWait, { initiative, waiting: fleet.queue.waiting?.[need.ref] ?? null, suggested: fleet.queue.suggested?.[need.ref] ?? null,

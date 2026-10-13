@@ -200,7 +200,13 @@ def test_evidence_freshness_is_separate_from_delivery_status(store):
     project = out["projects"][0]
     assert "evidence_freshness_days" in project
     assert project["evidence_freshness_days"] >= 5
+    checked = datetime.fromisoformat(project["evidence_checked_at"])
+    assert (_now() - checked).days >= 5
+    assert svc.portfolio()["projects"][0]["evidence_checked_at"] == project["evidence_checked_at"]
     assert project["status"] in ("on_track", "stalled", "at_risk", "idle")
+
+    _enable(store, "p2")
+    assert svc.portfolio()["projects"][1]["evidence_checked_at"] is None
 
 
 # ------------------------------------------------------------------ #

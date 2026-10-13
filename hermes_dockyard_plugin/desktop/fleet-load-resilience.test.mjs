@@ -45,6 +45,42 @@ async function shows(page, ready) {
   return (await errorCard.count()) === 0 ? 'content' : await page.locator('[role="alert"], .dy-error, main').first().innerText();
 }
 
+test('fleet context keeps view freshness, objective evidence and blocker actions distinct', async () => {
+  assert.ok(BASE && API, 'Run via run-browser-suite.mjs');
+  await forgetScope();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.addInitScript(() => { window.__hostActiveConnectionId = 'fleet-test'; });
+    await page.route(`${ROUTES}/health`, (route) => route.fulfill({ json: { fleet: true } }));
+    await page.route(`${ROUTES}/dispatch`, (route) => route.fulfill({ json: { profiles: ['techie'], initiatives: [] } }));
+    await page.route(`${ROUTES}/needs-you`, (route) => route.fulfill({ json: {
+      today: '2026-10-13', waiting: {}, suggested: {}, errors: [], items: [{
+        kind: 'blocked_card', project_id: GHOST, card_id: 'test-blocker', board: GHOST,
+        title: 'Blocked integration check', assignee: 'techie', detail: 'Provider approval is pending',
+        steps: 'Check the existing provider case before retrying.', steps_from: 'blocking comment',
+      }],
+    } }));
+    await page.route(`${ROUTES}/portfolio`, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.projects = body.projects.map((project) => ({ ...project, evidence_checked_at: '2026-10-01T12:00:00Z' }));
+      await route.fulfill({ response, json: body });
+    });
+    await page.goto(BASE);
+    const context = page.locator('[data-connection-context]');
+    await page.getByRole('button', { name: 'Inspect Blocked integration check', exact: true }).waitFor();
+    assert.match(await context.innerText(), /Connection: fleet-test.*Shared project data.*View refreshed/);
+    const project = page.locator(`[data-project-row="${GHOST}"]`);
+    assert.match(await project.innerText(), /Objectives checked 1 Oct/);
+    const row = page.getByRole('button', { name: 'Inspect Blocked integration check', exact: true });
+    assert.match(await row.innerText(), /Owner: techie/);
+    await row.click();
+    const detail = page.getByRole('complementary', { name: 'Selected item details' });
+    assert.match(await detail.innerText(), /Next action.*Check the existing provider case before retrying\./s);
+  } finally { await browser.close(); }
+});
+
 test('an unlinked project leaves every fleet tab working', async () => {
   assert.ok(BASE && API, 'Run via run-browser-suite.mjs');
   await forgetScope();

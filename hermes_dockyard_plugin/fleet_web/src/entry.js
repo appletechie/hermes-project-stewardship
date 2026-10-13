@@ -85,10 +85,8 @@ const HOST_CSS = `
 }
 `
 
-// The app reads light or dark from <html data-hermes-mode> (Hermes Desktop
-// sets it). The dashboard has no such flag, so it follows the luminance of the
-// theme's background, re-read whenever the dashboard rewrites its theme
-// variables on <html>.
+// The web SDK shim publishes this mode through useTheme(). It follows the
+// dashboard background whenever the dashboard rewrites its theme variables.
 function isDarkColour(rgb) {
   const [r, g, b] = (String(rgb).match(/[\d.]+/g) ?? []).map(Number)
   if (![r, g, b].every(Number.isFinite)) return true

@@ -2,6 +2,19 @@
 // (navigate, newChat, notify), mapped onto the Hermes web dashboard.
 // profileRoutes/activeConnectionId are Desktop connection concepts with no
 // dashboard equivalent; project/chat.js falls back to the profile name.
+import { useEffect, useState } from './react.js'
+
+export function useTheme() {
+  const read = () => document.documentElement.dataset.hermesMode
+  const [renderedMode, setRenderedMode] = useState(read)
+  useEffect(() => {
+    const observer = new MutationObserver(() => setRenderedMode(read()))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-hermes-mode'] })
+    setRenderedMode(read())
+    return () => observer.disconnect()
+  }, [])
+  return { renderedMode }
+}
 
 const BASE_PATH = (() => {
   const raw = (typeof window === 'undefined' ? '' : window.__HERMES_BASE_PATH__) || ''

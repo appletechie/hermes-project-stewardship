@@ -341,7 +341,12 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
       'data-project-row': project.project_id, children: [
         jsx('span', { role: 'cell', children: jsx('button', { type: 'button', className: 'dockyard-button small', onClick: () => onOpen?.(`s1:project/${project.project_id}`), children: project.project_id }) }),
         jsx('span', { role: 'cell', children: project.owner || 'Not assigned' }),
-        jsx('span', { role: 'cell', className: `dockyard-command-health ${project.status}`, children: status }),
+        jsxs('span', { role: 'cell', className: `dockyard-command-health ${project.status}`, children: [
+          status,
+          jsx('small', { className: 'dockyard-meta', style: { display: 'block' }, children: project.evidence_checked_at
+            ? `Objectives checked ${formatWhen(project.evidence_checked_at)}`
+            : project.evidence_freshness_days != null ? `Objectives checked ${project.evidence_freshness_days}d ago` : 'Objectives not checked yet' }),
+        ] }),
         jsxs('span', { role: 'cell', className: 'dockyard-command-progress', children: [
           jsx('span', { children: unreadable ? 'Unknown (not linked)' : total ? `${number(done)} / ${number(total)} work items` : 'No work items' }),
           jsx('span', { className: 'dockyard-command-progress-track', children: jsx('span', { style: { width: `${total ? Math.round((done / total) * 100) : 0}%` } }) }),
@@ -367,7 +372,7 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
       ] }),
       jsxs('section', { className: 'dockyard-command-section dockyard-command-directory-list', role: 'table', 'aria-label': 'Project fleet', children: [
         jsx('div', { className: 'dockyard-command-row dockyard-command-project-head', role: 'row', children:
-          ['Project', 'Owner', 'Health', 'Progress', 'Next milestone', 'Delivery risk'].map((label) => jsx('span', { role: 'columnheader', children: label }, label)) }),
+          ['Project', 'Owner', 'Delivery / evidence', 'Work completed', 'Next milestone', 'Delivery risk'].map((label) => jsx('span', { role: 'columnheader', children: label }, label)) }),
         filtered.length ? filtered.map(renderProjectRow) : jsx('p', { className: 'dockyard-command-empty', children: 'No projects match this filter.' }),
       ] }),
     ] })
@@ -475,7 +480,10 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
                 onClick: () => setSelected(item), 'aria-label': `Inspect ${item.title}`, children: [
                   jsx('span', { className: `dockyard-command-type ${issueLabels(item).tone}`, children: issueLabels(item).tag }),
                   jsxs('span', { className: 'dockyard-command-title', children: [jsx('strong', { children: item.title }), jsx('small', { children: item.ref || item.detail || '' })] }),
-                  jsx('span', { children: item.project }), jsx('span', { children: issueLabels(item).impact }),
+                  jsxs('span', { children: [item.project, item.fleet ? jsx('small', { className: 'dockyard-meta', style: { display: 'block' },
+                    children: item.fleet.card_id || item.fleet.kind === 'undispatched'
+                      ? `Owner: ${item.fleet.assignee || item.fleet.owner || 'Unassigned'}`
+                      : `Lead: ${projects.find((project) => project.project_id === item.project)?.owner || 'Not assigned'}` }) : null] }), jsx('span', { children: issueLabels(item).impact }),
                   jsx('span', { children: typeof item.age_days === 'number' ? `${number(item.age_days)}d` : 'Not recorded' }),
                 ]}, `${item.kind}:${item.ref || index}`)) : jsx('p', { className: 'dockyard-command-empty', children: 'No decisions or blocked work need attention.' }),
             ]}),
@@ -487,7 +495,7 @@ export function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
             ]}),
             jsxs('div', { className: 'dockyard-command-table-wrap', role: 'table', 'aria-label': 'Project fleet', children: [
               jsxs('div', { className: 'dockyard-command-row dockyard-command-project-head', role: 'row', children: [
-                ...['Project', 'Owner', 'Health', 'Progress', 'Next milestone', 'Delivery risk'].map(label => jsx('span', { role: 'columnheader', children: label }, label)),
+                ...['Project', 'Owner', 'Delivery / evidence', 'Work completed', 'Next milestone', 'Delivery risk'].map(label => jsx('span', { role: 'columnheader', children: label }, label)),
               ]}),
               projects.map(renderProjectRow),
             ]}),

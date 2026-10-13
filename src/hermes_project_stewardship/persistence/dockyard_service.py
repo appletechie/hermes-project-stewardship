@@ -1540,6 +1540,7 @@ class DockyardService:
                 "last_activity": last_activity.isoformat()
                 if last_activity else None,
                 "evidence_freshness_days": health_freshness.get(pid),
+                "evidence_checked_at": health_row["created_at"] if health_row else None,
             })
 
         return {"projects": projects, "mix": mix, "attention": attention,

@@ -48,10 +48,12 @@ import { hiddenNotifications } from '../data/scope.js'
 import { DEFAULT_FONT } from '../styles/themes.js'
 import { DEFAULT_THEME } from '../styles/themes.js'
 import { fontById } from '../styles/themes.js'
-import { hostIsDark } from '../styles/themes.js'
 import { hostIsDesktop } from '../styles/themes.js'
+import { useHostDark } from '../runtime/host-theme.js'
 import { themeById } from '../styles/themes.js'
 import { themeMode } from '../styles/themes.js'
+import { host } from '@hermes/plugin-sdk'
+import { formatWhen } from '../lib/ui.js'
 // Sahil 04/10 (demo feedback d): screens that work on one project ask for one
 // while the switcher is on All projects.
 const ONE_PROJECT_TABS = Object.freeze({ project: 'Projects', backlog: 'Backlog' })
@@ -73,7 +75,7 @@ export function DashboardPage({ inboxCss = '' } = {}) {
   // in the backend (/settings/appearance). Match Hermes follows Hermes
   // Desktop's own light/dark mode live (until now nothing set dark mode).
   const [appearance, setAppearance] = useState({ theme: DEFAULT_THEME, font: DEFAULT_FONT })
-  const [hostDark, setHostDark] = useState(() => hostIsDark())
+  const hostDark = useHostDark()
   const [hostDesktop] = useState(() => hostIsDesktop())
   // Asked for once, right after the first data load starts: the dashboard
   // stays the first request (same rule as the remembered project below).
@@ -86,14 +88,6 @@ export function DashboardPage({ inboxCss = '' } = {}) {
       () => {}, // unavailable: the defaults stand
     )
   }
-  useEffect(() => {
-    const read = () => setHostDark(hostIsDark())
-    const watcher = typeof MutationObserver === 'function' ? new MutationObserver(read) : null
-    watcher?.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-hermes-mode'] })
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)')
-    media?.addEventListener?.('change', read)
-    return () => { watcher?.disconnect(); media?.removeEventListener?.('change', read) }
-  }, [])
   const appearanceRef = useRef(appearance)
   appearanceRef.current = appearance
   const changeAppearance = async (patch) => {
@@ -263,7 +257,7 @@ export function DashboardPage({ inboxCss = '' } = {}) {
       (result) => {
         if (mounted.current && result?.projects) adoptProjects(result.projects, serial)
         if (!current || serial !== loadSerial.current) return
-        setData({ tab, projectId: selectedProject, payload: result })
+        setData({ tab, projectId: selectedProject, payload: result, refreshedAt: new Date().toISOString() })
         if (tab === 'dashboard') {
           setCounts({
             approvals: Number(result.inbox?.count ?? result.owed_decisions ?? 0),
@@ -543,6 +537,8 @@ export function DashboardPage({ inboxCss = '' } = {}) {
   }
 
   const theme = themeById(appearance.theme)
+  const connection = host.activeConnectionId?.() || (hostDesktop ? 'Current Hermes backend' : window.location.host)
+  const profile = hostDesktop ? null : new URLSearchParams(window.location.search).get('profile')
   return jsxs('div', {
     className: 'dockyard-root',
     'data-theme': themeMode(theme.id, hostDark),
@@ -555,6 +551,9 @@ export function DashboardPage({ inboxCss = '' } = {}) {
       jsx(ConsoleBar, { tab, counts, projects: projectOptions, selectedProject, onProjectChange: selectProject,
         onTab: requestTab, onNewProject: openNewProject, onOnboardExisting: openOnboardExisting, onOpen: openDeepLink,
         archivedCount, onOpenArchived: () => setArchivedOpen(true) }),
+      jsx('p', { className: 'dockyard-meta', 'data-connection-context': true, style: { paddingInline: 20, overflowWrap: 'anywhere' },
+        children: [`Connection: ${connection}`, profile ? `Profile: ${profile}` : null, 'Shared project data',
+          data?.refreshedAt ? `View refreshed ${formatWhen(data.refreshedAt)}` : null].filter(Boolean).join(' · ') }),
       jsx('main', {
         id: 'dockyard-panel',
         role: 'tabpanel',

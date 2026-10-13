@@ -16,6 +16,17 @@
   }
 
   // hermes_dockyard_plugin/fleet_web/src/sdk.js
+  function useTheme() {
+    const read2 = () => document.documentElement.dataset.hermesMode;
+    const [renderedMode, setRenderedMode] = useState(read2);
+    useEffect(() => {
+      const observer = new MutationObserver(() => setRenderedMode(read2()));
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-hermes-mode"] });
+      setRenderedMode(read2());
+      return () => observer.disconnect();
+    }, []);
+    return { renderedMode };
+  }
   var BASE_PATH = (() => {
     const raw = (typeof window === "undefined" ? "" : window.__HERMES_BASE_PATH__) || "";
     if (!raw) return "";
@@ -2379,13 +2390,6 @@
   function themeMode(themeId, hostDark) {
     const theme = themeById(themeId);
     return theme.mode === "auto" ? hostDark ? "dark" : "light" : theme.mode;
-  }
-  function hostIsDark() {
-    const html = document.documentElement;
-    const mode = html.dataset.hermesMode;
-    if (mode === "dark" || mode === "light") return mode === "dark";
-    if (html.classList.contains("dark")) return true;
-    return Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
   }
   function hostIsDesktop() {
     return Boolean(getComputedStyle(document.documentElement).getPropertyValue("--dt-background").trim());
@@ -7915,8 +7919,10 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
     return jsxs("div", { className: "dockyard-fleet-need", "data-fleet-need": need.kind, style: { minWidth: 0, overflowWrap: "anywhere" }, children: [
       facts ? jsx("p", { className: "dockyard-meta", children: facts }) : null,
       need.kind !== "approval" && need.detail ? jsx("p", { children: need.detail }) : null,
-      need.steps ? jsx("h4", { children: need.steps_from ? `Steps from ${need.steps_from}` : need.kind === "wait_suggested" ? "Evidence" : "Note" }) : null,
+      need.steps ? jsx("h4", { children: need.kind === "wait_suggested" ? "Evidence" : "Next action" }) : null,
+      need.steps && need.steps_from ? jsx("p", { className: "dockyard-meta", children: `From ${need.steps_from}` }) : null,
       need.steps ? jsx("p", { style: { whiteSpace: "pre-wrap" }, children: need.steps }) : null,
+      need.kind === "blocked_card" && !need.steps ? jsx("p", { children: `Next action not recorded. Ask ${need.assignee || "the project lead"} to record what will unblock this card.` }) : null,
       need.kind === "undispatched" ? jsx(Button, { variant: "primary", action: "fleet-open-dispatch", onClick: () => setOwning(true), children: "Dispatch" }) : null,
       need.ref ? jsx("h4", { children: "Waiting on" }) : null,
       need.ref ? jsx(FleetWait, {
@@ -8841,7 +8847,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
       runImport,
       api: api2
     } = props;
-    return !window.__V4_DISABLE?.has("wizard") ? jsxs("section", { className: "dockyard-modal-layer", "data-bulk-import-layer": true, hidden: !importOpen, children: [
+    return jsxs("section", { className: "dockyard-modal-layer", "data-bulk-import-layer": true, hidden: !importOpen, children: [
       jsxs("div", { className: "dockyard-modal dockyard-onboarding", role: "dialog", "aria-modal": true, "aria-labelledby": "dockyard-import-title", children: [
         jsxs("header", { className: "dockyard-onboarding-head", children: [
           jsxs("div", { children: [
@@ -9058,7 +9064,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
           ] })
         ] })
       ] })
-    ] }) : null;
+    ] });
   }
 
   // hermes_dockyard_plugin/desktop/src/views/backlog-model.js
@@ -9327,7 +9333,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         jsx("button", { type: "button", "data-transfer-retry": operation.op_id, onClick: () => retryTransfer(operation.op_id), children: "Retry remaining items" })
       ] }, operation.op_id)),
       entries.length > 0 ? jsxs("section", { className: "dockyard-backlog-list", "data-backlog-table": true, children: [
-        !window.__V4_DISABLE?.has("cmdbar") ? jsxs("div", { className: "dockyard-cmdbar", "data-column-filters": true, children: [
+        jsxs("div", { className: "dockyard-cmdbar", "data-column-filters": true, children: [
           jsxs("label", { className: "cm-search", children: [
             jsx(Icon, { name: "search" }, "v4-search"),
             jsx("input", { type: "search", "data-cm-search": true, "aria-label": "Search backlog", placeholder: "Search backlog", value: search, onInput: (event) => setSearch(event.target.value) })
@@ -9460,8 +9466,8 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
             sortKey !== "rank" ? `sorted by ${sortLabels[sortKey]}` : "",
             groupBy !== "none" ? `grouped by ${GROUP_LABELS[groupBy]}` : ""
           ].filter(Boolean).join(" \xB7 "), children: treeRows.length === entries.length ? `${number(entries.length)} items` : `${number(treeRows.length)} of ${number(entries.length)}` })
-        ] }) : null,
-        !window.__V4_DISABLE?.has("head") ? jsxs("div", { className: "tree-head", children: [
+        ] }),
+        jsxs("div", { className: "tree-head", children: [
           jsx("span", { className: "th-gutter" }),
           sortHeader("rank", "Rank", "th-rank"),
           sortHeader("type", "Type", "th-type"),
@@ -9472,12 +9478,12 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
           sortHeader("age", "Age", "th-age"),
           jsx("span", { className: "th-reason", children: "Priority reason" }),
           jsx("span", { className: "th-act", "aria-label": "Actions" })
-        ] }) : null,
-        !window.__V4_DISABLE?.has("head") && treeRows.length === 0 ? jsxs("div", { className: "tree-group-head", "data-no-matches": true, children: [
+        ] }),
+        treeRows.length === 0 ? jsxs("div", { className: "tree-group-head", "data-no-matches": true, children: [
           jsx("span", { children: hasFilters ? "No items match the current search and filters." : "No backlog items to show." }),
           hasFilters ? jsx("button", { type: "button", className: "cm-chip", onClick: resetFilters, children: "Clear filters" }) : null
         ] }) : null,
-        ...window.__V4_DISABLE?.has("rows") ? [] : groups.flatMap(([label, rows], gi) => [
+        ...groups.flatMap(([label, rows], gi) => [
           label !== null ? jsxs("div", { className: "tree-group-head", children: [
             jsx("span", { children: label }),
             jsx("span", { className: "grp-count", children: `\xB7 ${rows.length}` })
@@ -9704,7 +9710,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
             }, ref);
           })
         ]),
-        !window.__V4_DISABLE?.has("popover") && bulkSelected.length ? jsxs("div", { className: "sel-pop", "data-selection-popover": true, onClick: (event) => event.stopPropagation(), children: [
+        bulkSelected.length ? jsxs("div", { className: "sel-pop", "data-selection-popover": true, onClick: (event) => event.stopPropagation(), children: [
           jsx("span", { className: "sel-count", children: `${bulkSelected.length} selected` }),
           jsx("span", { className: "sel-sep" }),
           jsxs("select", { "data-pop-target": true, "aria-label": "Bulk target", defaultValue: "", children: [
@@ -9740,7 +9746,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         ] }) : null
       ] }) : q ? jsx(EmptyState, { title: "No matches", description: `Nothing in the backlog matches \u201C${search}\u201D. Clear the filter to see all items.`, icon: "project", children: jsx(Button, { small: true, onClick: () => setSearch(""), children: "Clear filter" }) }) : jsx(EmptyState, { title: "No ranked backlog items", description: "Work items appear here after they are added to the project backlog.", icon: "project" }),
       detailItem ? jsx(WorkItemDetail, { item: detailItem, projectId: project.id, profiles: view.profiles ?? [], initiatives: view.initiatives ?? [], onClose: () => setDetailItem(null), onRefresh }) : null,
-      !window.__V4_DISABLE?.has("wizard") ? jsx(BacklogImportWizard, {
+      jsx(BacklogImportWizard, {
         project,
         importOpen,
         importStep,
@@ -9766,7 +9772,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         parseImport,
         runImport,
         api
-      }) : null,
+      }),
       jsx(BacklogReasonModal, { pendingMove, reason, setReason, error, saving, pendingParentItem, pendingParentRef, pendingParentChoices, pendingParentChanged, saveParent, saveMove, setPendingMove, typeLabel: typeLabel2 }),
       jsxs("section", {
         className: "dockyard-modal-layer",
@@ -13897,7 +13903,10 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         children: [
           jsx("span", { role: "cell", children: jsx("button", { type: "button", className: "dockyard-button small", onClick: () => onOpen?.(`s1:project/${project.project_id}`), children: project.project_id }) }),
           jsx("span", { role: "cell", children: project.owner || "Not assigned" }),
-          jsx("span", { role: "cell", className: `dockyard-command-health ${project.status}`, children: status }),
+          jsxs("span", { role: "cell", className: `dockyard-command-health ${project.status}`, children: [
+            status,
+            jsx("small", { className: "dockyard-meta", style: { display: "block" }, children: project.evidence_checked_at ? `Objectives checked ${formatWhen(project.evidence_checked_at)}` : project.evidence_freshness_days != null ? `Objectives checked ${project.evidence_freshness_days}d ago` : "Objectives not checked yet" })
+          ] }),
           jsxs("span", { role: "cell", className: "dockyard-command-progress", children: [
             jsx("span", { children: unreadable ? "Unknown (not linked)" : total ? `${number(done)} / ${number(total)} work items` : "No work items" }),
             jsx("span", { className: "dockyard-command-progress-track", children: jsx("span", { style: { width: `${total ? Math.round(done / total * 100) : 0}%` } }) })
@@ -13929,7 +13938,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
           })
         ] }),
         jsxs("section", { className: "dockyard-command-section dockyard-command-directory-list", role: "table", "aria-label": "Project fleet", children: [
-          jsx("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: ["Project", "Owner", "Health", "Progress", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label)) }),
+          jsx("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: ["Project", "Owner", "Delivery / evidence", "Work completed", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label)) }),
           filtered.length ? filtered.map(renderProjectRow) : jsx("p", { className: "dockyard-command-empty", children: "No projects match this filter." })
         ] })
       ] });
@@ -14079,7 +14088,11 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
                   children: [
                     jsx("span", { className: `dockyard-command-type ${issueLabels(item).tone}`, children: issueLabels(item).tag }),
                     jsxs("span", { className: "dockyard-command-title", children: [jsx("strong", { children: item.title }), jsx("small", { children: item.ref || item.detail || "" })] }),
-                    jsx("span", { children: item.project }),
+                    jsxs("span", { children: [item.project, item.fleet ? jsx("small", {
+                      className: "dockyard-meta",
+                      style: { display: "block" },
+                      children: item.fleet.card_id || item.fleet.kind === "undispatched" ? `Owner: ${item.fleet.assignee || item.fleet.owner || "Unassigned"}` : `Lead: ${projects.find((project) => project.project_id === item.project)?.owner || "Not assigned"}`
+                    }) : null] }),
                     jsx("span", { children: issueLabels(item).impact }),
                     jsx("span", { children: typeof item.age_days === "number" ? `${number(item.age_days)}d` : "Not recorded" })
                   ]
@@ -14093,7 +14106,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
               ] }),
               jsxs("div", { className: "dockyard-command-table-wrap", role: "table", "aria-label": "Project fleet", children: [
                 jsxs("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: [
-                  ...["Project", "Owner", "Health", "Progress", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label))
+                  ...["Project", "Owner", "Delivery / evidence", "Work completed", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label))
                 ] }),
                 projects.map(renderProjectRow)
               ] })
@@ -19944,7 +19957,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         jsx("span", { className: "dockyard-card-label", children: "PREVIEW" }),
         selected ? jsx("h2", { children: selected.filename }) : jsx("h2", { children: "Select a document" }),
         previewState === "loading" ? jsx("p", { children: "Loading preview..." }) : null,
-        previewState === "ready" && selected?.preview_kind === "text" ? jsx("pre", { "data-content-preview": true, className: "dockyard-content-preview", children: selected.text || "This text file is empty." }) : previewState === "ready" && selected?.preview_kind === "image" && selected.data_base64 ? jsx("img", { "data-content-preview": true, "data-preview-kind": "image", className: "dockyard-content-image", alt: selected.filename, src: `data:${selected.media_type};base64,${selected.data_base64}` }) : previewState === "ready" && selected?.preview_kind === "pdf" && mediaUrl ? jsx("iframe", { "data-content-preview": true, "data-preview-kind": "pdf", className: "dockyard-content-pdf", title: `PDF preview: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" && selected?.preview_kind === "video" && mediaUrl ? jsx("video", { "data-content-preview": true, "data-preview-kind": "video", className: "dockyard-content-video", controls: true, preload: "metadata", "aria-label": `Video: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" ? jsx("div", { "data-content-preview": true, className: "dockyard-report-placeholder", children: `Preview is not available for ${mediaTypeLabel(selected?.media_type)}. File metadata remains visible.` }) : previewState === "idle" ? jsx("p", { className: "dockyard-meta", children: "Text, Markdown, images, PDFs and videos show here." }) : null,
+        previewState === "ready" && selected?.preview_kind === "text" ? jsx("pre", { "data-content-preview": true, className: "dockyard-content-preview", children: selected.text || "This text file is empty." }) : previewState === "ready" && selected?.preview_kind === "image" && selected.data_base64 ? jsx("img", { "data-content-preview": true, "data-preview-kind": "image", className: "dockyard-content-image", alt: selected.filename, src: `data:${selected.media_type};base64,${selected.data_base64}` }) : previewState === "ready" && selected?.preview_kind === "pdf" && mediaUrl ? jsx("iframe", { "data-content-preview": true, "data-preview-kind": "pdf", className: "dockyard-content-pdf", title: `PDF preview: ${selected.filename}`, src: mediaUrl, sandbox: "allow-same-origin" }) : previewState === "ready" && selected?.preview_kind === "video" && mediaUrl ? jsx("video", { "data-content-preview": true, "data-preview-kind": "video", className: "dockyard-content-video", controls: true, preload: "metadata", "aria-label": `Video: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" ? jsx("div", { "data-content-preview": true, className: "dockyard-report-placeholder", children: `Preview is not available for ${mediaTypeLabel(selected?.media_type)}. File metadata remains visible.` }) : previewState === "idle" ? jsx("p", { className: "dockyard-meta", children: "Text, Markdown, images, PDFs and videos show here." }) : null,
         selected ? jsxs("div", { className: "dockyard-form-actions", children: [
           selected.archived_at ? jsx(Button, { action: "restore-project-content", disabled: actionBusy, onClick: () => setContentAction("restore"), children: "Restore" }) : jsx(Button, { action: "archive-project-content", disabled: actionBusy, onClick: () => setContentAction("archive"), children: "Archive" }),
           jsx(Button, { action: "remove-project-content", variant: "danger", disabled: actionBusy, onClick: () => setContentAction("remove"), children: "Remove file" })
@@ -24570,16 +24583,6 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
       if (items.some((item) => item.ref === focusRef)) setSelectedRef(focusRef);
     }, [focusRef, items]);
     useEffect(() => {
-      const handle = (event) => {
-        const link = event.detail;
-        if (typeof link !== "string" || !link.startsWith("s6:initiative/")) return;
-        const ref = link.slice("s6:initiative/".length);
-        if (items.some((item) => item.ref === ref)) setSelectedRef(ref);
-      };
-      window.addEventListener("dockyard:test:deeplink", handle);
-      return () => window.removeEventListener("dockyard:test:deeplink", handle);
-    }, [items]);
-    useEffect(() => {
       const close = (event) => {
         if (event.key !== "Escape" || !selectedRef) return;
         const ref = selectedRef;
@@ -26445,6 +26448,29 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
     return (view.notifications ?? []).filter((note) => ownerOf(note) !== projectId).length;
   }
 
+  // hermes_dockyard_plugin/desktop/src/runtime/host-theme.js
+  var noHostTheme = () => null;
+  var useSdkTheme = typeof useTheme === "function" ? useTheme : noHostTheme;
+  var systemQuery = () => window.matchMedia?.("(prefers-color-scheme: dark)");
+  function systemIsDark() {
+    return Boolean(systemQuery()?.matches);
+  }
+  function hostThemeMode(value) {
+    const mode = value?.renderedMode ?? value?.resolvedMode;
+    return mode === "dark" || mode === "light" ? mode : null;
+  }
+  function useHostDark() {
+    const hostMode = hostThemeMode(useSdkTheme());
+    const [systemDark, setSystemDark] = useState(systemIsDark);
+    useEffect(() => {
+      const media = systemQuery();
+      const read2 = () => setSystemDark(systemIsDark());
+      media?.addEventListener?.("change", read2);
+      return () => media?.removeEventListener?.("change", read2);
+    }, []);
+    return hostMode ? hostMode === "dark" : systemDark;
+  }
+
   // hermes_dockyard_plugin/desktop/src/shell/dashboard-page.js
   var ONE_PROJECT_TABS = Object.freeze({ project: "Projects", backlog: "Backlog" });
   function DashboardPage({ inboxCss = "" } = {}) {
@@ -26459,7 +26485,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
       loadArchivedProjects().then((rows) => setArchivedCount(rows.length), () => setArchivedCount(0));
     };
     const [appearance, setAppearance] = useState({ theme: DEFAULT_THEME, font: DEFAULT_FONT });
-    const [hostDark, setHostDark] = useState(() => hostIsDark());
+    const hostDark = useHostDark();
     const [hostDesktop] = useState(() => hostIsDesktop());
     const appearanceAsked = useRef(false);
     const askAppearance = () => {
@@ -26474,17 +26500,6 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         // unavailable: the defaults stand
       );
     };
-    useEffect(() => {
-      const read2 = () => setHostDark(hostIsDark());
-      const watcher = typeof MutationObserver === "function" ? new MutationObserver(read2) : null;
-      watcher?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-hermes-mode"] });
-      const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-      media?.addEventListener?.("change", read2);
-      return () => {
-        watcher?.disconnect();
-        media?.removeEventListener?.("change", read2);
-      };
-    }, []);
     const appearanceRef = useRef(appearance);
     appearanceRef.current = appearance;
     const changeAppearance = async (patch) => {
@@ -26613,7 +26628,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         (result) => {
           if (mounted.current && result?.projects) adoptProjects(result.projects, serial);
           if (!current || serial !== loadSerial.current) return;
-          setData({ tab, projectId: selectedProject, payload: result });
+          setData({ tab, projectId: selectedProject, payload: result, refreshedAt: (/* @__PURE__ */ new Date()).toISOString() });
           if (tab === "dashboard") {
             setCounts({
               approvals: Number(result.inbox?.count ?? result.owed_decisions ?? 0),
@@ -26887,6 +26902,8 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
       ] });
     }
     const theme = themeById(appearance.theme);
+    const connection = host.activeConnectionId?.() || (hostDesktop ? "Current Hermes backend" : window.location.host);
+    const profile = hostDesktop ? null : new URLSearchParams(window.location.search).get("profile");
     return jsxs("div", {
       className: "dockyard-root",
       "data-theme": themeMode(theme.id, hostDark),
@@ -26908,6 +26925,17 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
             onOpen: openDeepLink,
             archivedCount,
             onOpenArchived: () => setArchivedOpen(true)
+          }),
+          jsx("p", {
+            className: "dockyard-meta",
+            "data-connection-context": true,
+            style: { paddingInline: 20, overflowWrap: "anywhere" },
+            children: [
+              `Connection: ${connection}`,
+              profile ? `Profile: ${profile}` : null,
+              "Shared project data",
+              data?.refreshedAt ? `View refreshed ${formatWhen(data.refreshedAt)}` : null
+            ].filter(Boolean).join(" \xB7 ")
           }),
           jsx("main", {
             id: "dockyard-panel",
@@ -26998,6 +27026,15 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
     const interval = Number(window.__dockyardPopupIntervalMs) > 0 ? Number(window.__dockyardPopupIntervalMs) : POPUP_INTERVAL_MS;
     window.__dockyardPopupPoller = setInterval(tick, interval);
     window.setTimeout(tick, 1500);
+  }
+  function stopPopupPoller() {
+    if (!window.__dockyardPopupPoller) return;
+    clearInterval(window.__dockyardPopupPoller);
+    window.__dockyardPopupPoller = void 0;
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", stopPopupPoller);
+    window.addEventListener("pageshow", () => startPopupPoller());
   }
   var __plugin = {
     id: "hermes-project-stewardship",

@@ -43,6 +43,10 @@ test('registers the tab, calls its own plugin API and surfaces pop-ups', async (
     assert.equal(registered.length, 1)
     assert.equal(registered[0][0], 'hermes-project-stewardship')
     assert.match(renderToString(React.createElement(registered[0][1])), /class="hps-fleet-web"><div class="dockyard-root"/)
+    window.document.documentElement.dataset.hermesMode = 'dark'
+    assert.match(renderToString(React.createElement(registered[0][1])), /data-theme="dark"/)
+    window.document.documentElement.dataset.hermesMode = 'light'
+    assert.match(renderToString(React.createElement(registered[0][1])), /data-theme="light"/)
     for (let n = 0; n < 40 && calls.length < 2; n++) await new Promise((resolve) => setTimeout(resolve, 100))
     assert.deepEqual(calls[0], { url: '/api/plugins/hermes-project-stewardship/notifications/popups', method: 'GET' })
     assert.deepEqual(calls[1], { url: '/api/plugins/hermes-project-stewardship/notifications/popups/shown', method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"ids":[7]}' })

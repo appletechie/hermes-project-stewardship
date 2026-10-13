@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import re
-import time
 from typing import Any, Iterator
 
 from .work_parents import WorkParents
@@ -55,10 +54,24 @@ class ProjectKanbanHost:
 
     def __init__(self, *, hermes_home: str | Path, board: str = "default", **_kwargs) -> None:
         self.hermes_home = Path(hermes_home)
-        self.kanban_home = Path(os.environ.get("HERMES_KANBAN_HOME", self.hermes_home))
+        self.kanban_home = self._shared_kanban_home()
         self.board = (board or "default").strip()
         # Grouping parents live beside the boards, never as Hermes links (owner decision 4 = B).
         self._work_parents = WorkParents(self.kanban_home / "dockyard" / "work-parents.db")
+
+    def _shared_kanban_home(self) -> Path:
+        """The board root core itself uses: never the plugin's own guess.
+
+        Core resolves HERMES_KANBAN_HOME (tests and pinned deployments) and
+        otherwise the shared Hermes root, so a profile process stays on the
+        shared board. Without a runtime the adapter fails closed later; the
+        fallback here only names a path.
+        """
+        try:
+            from hermes_cli import kanban_db
+        except ImportError:
+            return Path(os.environ.get("HERMES_KANBAN_HOME") or self.hermes_home)
+        return Path(kanban_db.kanban_home())
 
     @staticmethod
     def _modules():
@@ -68,20 +81,16 @@ class ProjectKanbanHost:
 
     @contextmanager
     def _scope(self, board: str | None = None) -> Iterator[str]:
+        # Context-local only: os.environ is shared by every thread in the
+        # Hermes process, so it is never written here (catalog review).
         hermes_constants, kanban_db, _ = self._modules()
         selected = (board or self.board or "default").strip()
         token = hermes_constants.set_hermes_home_override(self.hermes_home)
-        previous_kanban_home = os.environ.get("HERMES_KANBAN_HOME")
-        os.environ["HERMES_KANBAN_HOME"] = str(self.kanban_home)
         try:
             with kanban_db.scoped_current_board(selected):
                 yield selected
         finally:
             hermes_constants.reset_hermes_home_override(token)
-            if previous_kanban_home is None:
-                os.environ.pop("HERMES_KANBAN_HOME", None)
-            else:
-                os.environ["HERMES_KANBAN_HOME"] = previous_kanban_home
 
     def capabilities(self) -> dict[str, Any]:
         return {"contract_version": CONTRACT_VERSION, "methods": sorted(_METHODS)}
@@ -477,18 +486,6 @@ class ProjectKanbanHost:
                     raise HostError("transition_conflict", "canonical task transition was rejected")
             return self._full_record(conn, selected, kb.get_task(conn, epic_id))
 
-    @staticmethod
-    def _set_status(conn, task_id: str, status: str) -> None:
-        allowed = {"backlog", "triage", "todo", "ready", "review", "done", "blocked"}
-        if status not in allowed:
-            raise HostError("validation_error", "canonical task status is invalid")
-        status = ProjectKanbanHost._native_status(status)
-        completed = int(time.time()) if status == "done" else None
-        conn.execute(
-            "UPDATE tasks SET status=?, completed_at=?, claim_lock=NULL, claim_expires=NULL WHERE id=?",
-            (status, completed, task_id),
-        )
-
     def transition_task(
         self, task_id: str, status: str, *, board: str | None = None,
         force_review: bool = False, **_kwargs: Any,
@@ -558,6 +555,9 @@ class ProjectKanbanHost:
                         raise HostError("validation_error", "a work item cannot sit under itself")
                     seen.add(cursor)
                     cursor = stored.get(cursor)
+            # Hermes core has no API to edit a task's title, body or tenant after
+            # creation (status and assignee go through core's own functions), so
+            # these three columns are the only fields written here directly.
             for key, column in columns.items():
                 if key in changes:
                     conn.execute(f"UPDATE tasks SET {column}=? WHERE id=?", (changes[key], task_id))
@@ -599,34 +599,36 @@ class ProjectKanbanHost:
         self, task_id: str, from_profile: str, to_profile: str,
         guard: dict[str, Any], *, board: str | None = None,
     ) -> dict[str, Any]:
-        """Atomically verify transfer guards and assign in one host transaction."""
+        """Check the transfer guards, then assign through core's assign_task.
+
+        Core's assign_task records the `assigned` event, resets the failure
+        streak and refuses a task a worker is running; it opens its own write
+        transaction, so the guards are read just before it rather than inside
+        one transaction with it (catalog review, PR #136752).
+        """
         with self._kanban(board) as (kb, conn, selected):
-            with kb.write_txn(conn):
-                task = kb.get_task(conn, task_id)
-                if task is None:
-                    raise HostError("task_not_found", "canonical task was not found")
-                record = self._task_record(task)
-                if record.get("task_kind") == "epic":
-                    raise HostError("write_conflict", "epic_assignment_unsupported")
-                if str(record.get("assignee") or "") != str(guard.get("expect_assignee") or from_profile):
-                    raise HostError("write_conflict", "assignee_changed")
-                if str(record.get("status") or "") not in set(guard.get("eligible_statuses") or ()):
-                    raise HostError("write_conflict", "claimed_or_running")
-                if guard.get("claim_lock_absent") and (
-                    record.get("claim_lock") or record.get("current_run_id")
-                ):
-                    raise HostError("write_conflict", "claimed_or_running")
-                if int(record["revision"]) != int(guard.get("expected_revision", -1)):
-                    raise HostError("write_conflict", "revision_changed")
-                changed = conn.execute(
-                    "UPDATE tasks SET assignee=?, consecutive_failures=0, "
-                    "last_failure_error=NULL WHERE id=? AND assignee=? AND status=? "
-                    "AND claim_lock IS NULL AND current_run_id IS NULL",
-                    (to_profile, task_id, from_profile, record["status"]),
-                )
-                if changed.rowcount != 1:
-                    raise HostError("write_conflict", "canonical task changed before assignment")
-            kb.notify_task_updated(conn, task_id, ("assignee",))
+            task = kb.get_task(conn, task_id)
+            if task is None:
+                raise HostError("task_not_found", "canonical task was not found")
+            record = self._task_record(task)
+            if record.get("task_kind") == "epic":
+                raise HostError("write_conflict", "epic_assignment_unsupported")
+            if str(record.get("assignee") or "") != str(guard.get("expect_assignee") or from_profile):
+                raise HostError("write_conflict", "assignee_changed")
+            if str(record.get("status") or "") not in set(guard.get("eligible_statuses") or ()):
+                raise HostError("write_conflict", "claimed_or_running")
+            if guard.get("claim_lock_absent") and (
+                record.get("claim_lock") or record.get("current_run_id")
+            ):
+                raise HostError("write_conflict", "claimed_or_running")
+            if int(record["revision"]) != int(guard.get("expected_revision", -1)):
+                raise HostError("write_conflict", "revision_changed")
+            try:
+                assigned = kb.assign_task(conn, task_id, to_profile)
+            except RuntimeError:
+                raise HostError("write_conflict", "claimed_or_running") from None
+            if not assigned:
+                raise HostError("task_not_found", "canonical task was not found")
             return self._full_record(conn, selected, kb.get_task(conn, task_id))
 
     def link_tasks(self, parent_id: str, child_id: str, *, board: str | None = None) -> dict[str, Any]:

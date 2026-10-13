@@ -744,11 +744,11 @@ test('Planning cards: Word-style description formatting saves as safe rich text'
     for (const name of ['style', 'size', 'bold', 'italic', 'underline', 'strike', 'bullets', 'numbers', 'left', 'center', 'right', 'justify', 'clear']) assert.equal(await tool(name).count(), 1, `tool ${name}`);
     await body.click();
     const cardsBefore = await canvas.locator('[data-canvas-object]').count();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     await page.keyboard.press('Backspace');
     await page.keyboard.press('Control+z');
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     assert.equal(await canvas.locator('[data-canvas-object]').count(), cardsBefore, 'typing Delete/Backspace/Ctrl+Z in a field never touches the board');
     assert.equal(await drawer.count(), 1, 'details panel stays open while typing');
@@ -850,7 +850,7 @@ test('Planning cards: pasted lists are clamped to what the server stores (Quan M
     await drawer.waitFor();
     const body = drawer.locator('[data-canvas-rich-text]');
     await body.click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     let deep = '<li>deep</li>';
     for (let i = 0; i < 9; i += 1) deep = `<li>level ${9 - i}<ul>${deep}</ul></li>`;
@@ -888,7 +888,7 @@ const openEditor = async (page) => {
   const body = drawer.locator('[data-canvas-rich-text]');
   const tool = (name) => drawer.locator(`[data-rt="${name}"]`);
   await body.click();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Delete');
   return { canvas, drawer, body, tool, id };
 };
@@ -945,7 +945,7 @@ test('Rich text: undo and redo step back through toolbar actions, paste and typi
     await page.keyboard.press('Control+z');
     assert.equal(await html(), typed, 'undo size');
     await selectText(page, 'beta');
-    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowRight');
     await pasteHtml(page, '<p> MID</p>');
     assert.match(await body.innerText(), /alpha beta MID/);
     await page.keyboard.press('Control+z');
@@ -972,7 +972,7 @@ test('Rich text: undo on a card that already had text never wipes it, and Tab in
     const body = drawer.locator('[data-canvas-rich-text]');
     const tool = (name) => drawer.locator(`[data-rt="${name}"]`);
     await body.click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     await page.keyboard.type('kept text');
     await drawer.locator('[data-action="apply-canvas-object"]').click();
@@ -1121,7 +1121,7 @@ test('Rich text: Quan re-check 2 - stale redo, caret after undo, server-sized li
     await page.keyboard.press('Control+y');
     assert.match(await body.innerText(), /NEWTEXT/, 'redo after new typing keeps the new text');
     // M1: caret after undo lands where it was, after a toolbar-built list.
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     // Bullets on an EMPTY editor starts a real list (Quan re-check 3, H1).
     await tool('bullets').click();
@@ -1145,14 +1145,14 @@ test('Rich text: Quan re-check 2 - stale redo, caret after undo, server-sized li
     await page.keyboard.type('Q');
     assert.match(await body.innerText(), /tail wordsQ here/, 'caret after undo is at the undone edit');
     // L1: triple-click a heading then Clear leaves the next heading alone.
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     await pasteHtml(page, '<h1>First head</h1><h2 style="text-align:right">Second head</h2>');
     await body.locator('h1').click({ clickCount: 3 });
     await tool('clear').click();
     assert.equal(await body.locator('h2[style*="right"]').innerText(), 'Second head', 'next heading untouched');
     // L2: a selection from a paragraph into a list cannot align.
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     await page.keyboard.type('para');
     await page.keyboard.press('Enter');
@@ -1167,11 +1167,11 @@ test('Rich text: Quan re-check 2 - stale redo, caret after undo, server-sized li
     await page.waitForTimeout(50);
     assert.equal(await tool('center').isDisabled(), true, 'alignment off when the selection reaches a list');
     // L3: select-all + Delete after a nested list leaves no empty bullets.
-    await page.keyboard.press('End');
+    await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
     await page.keyboard.type('nested');
     await page.keyboard.press('Tab');
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     // L5: dropping a file (no text) inserts nothing.
     await page.keyboard.type('alpha');
@@ -1190,7 +1190,7 @@ test('Rich text: Quan re-check 2 - stale redo, caret after undo, server-sized li
     await ctx.canvas.locator(`[data-canvas-object="${ctx.id}"]`).click();
     await drawer.waitFor();
     await body.click();
-    await page.keyboard.press('Control+a');
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
     await pasteHtml(page, Array.from({ length: 330 }, (_, i) => `<span data-size="huge"><b><i><u><s>r${i}</s></u></i></b></span><span>-</span>`).join(''));
     const problem = drawer.locator('[data-canvas-rich-problem]');

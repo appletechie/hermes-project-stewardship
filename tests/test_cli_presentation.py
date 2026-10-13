@@ -57,6 +57,8 @@ def test_health_line_includes_state_score_phase_and_lead():
 
 
 def test_initiative_rows_render_known_and_unknown_risk(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(ui.sys.stdout, "isatty", lambda: False)
     rows = ui.initiative_rows([
         {"ref": "PM-1", "risk": "high", "status": "pending_approval", "title": "T"},
         {"ref": "PM-2", "risk": "bizarre", "status": "pending_approval", "title": "U"},

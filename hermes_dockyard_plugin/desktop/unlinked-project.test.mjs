@@ -182,7 +182,7 @@ test('the Dashboard calls a missing link "Not linked", lists it near the top and
     const healthyFirst = order.findIndex(([, cls]) => /\b(on_track|idle)\b/.test(cls))
     assert.ok(healthyFirst === -1 || ghostAt < healthyFirst, `unlinked sorted below healthy rows: ${JSON.stringify(order)}`)
     const ghostRow = page.locator(`[data-project-row="${GHOST}"]`)
-    assert.equal(await ghostRow.locator('.dockyard-command-health').innerText(), 'Not linked')
+    assert.equal((await ghostRow.locator('.dockyard-command-health').innerText()).split('\n')[0], 'Not linked')
     // Hermes never said there was no work or no blocker: do not claim it.
     assert.doesNotMatch(await ghostRow.innerText(), /No work items|No open blockers/)
     assert.match(await page.locator('.dockyard-command-health-track').getAttribute('aria-label'), /1 not linked/)

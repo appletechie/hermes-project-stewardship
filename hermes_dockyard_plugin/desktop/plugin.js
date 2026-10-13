@@ -12,7 +12,7 @@ import {
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 
 // hermes_dockyard_plugin/desktop/src/index.js
-import { host as host2 } from "@hermes/plugin-sdk";
+import { host as host3 } from "@hermes/plugin-sdk";
 
 // hermes_dockyard_plugin/desktop/src/data/unlinked.js
 var UNLINKED_TITLE = "Not linked to a Hermes project";
@@ -2289,13 +2289,6 @@ var fontById = (id) => FONTS.find((font) => font.id === id) ?? FONTS[0];
 function themeMode(themeId, hostDark) {
   const theme = themeById(themeId);
   return theme.mode === "auto" ? hostDark ? "dark" : "light" : theme.mode;
-}
-function hostIsDark() {
-  const html = document.documentElement;
-  const mode = html.dataset.hermesMode;
-  if (mode === "dark" || mode === "light") return mode === "dark";
-  if (html.classList.contains("dark")) return true;
-  return Boolean(window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 }
 function hostIsDesktop() {
   return Boolean(getComputedStyle(document.documentElement).getPropertyValue("--dt-background").trim());
@@ -7825,8 +7818,10 @@ function FleetNeedPanel({ item, fleet, onChanged }) {
   return jsxs("div", { className: "dockyard-fleet-need", "data-fleet-need": need.kind, style: { minWidth: 0, overflowWrap: "anywhere" }, children: [
     facts ? jsx("p", { className: "dockyard-meta", children: facts }) : null,
     need.kind !== "approval" && need.detail ? jsx("p", { children: need.detail }) : null,
-    need.steps ? jsx("h4", { children: need.steps_from ? `Steps from ${need.steps_from}` : need.kind === "wait_suggested" ? "Evidence" : "Note" }) : null,
+    need.steps ? jsx("h4", { children: need.kind === "wait_suggested" ? "Evidence" : "Next action" }) : null,
+    need.steps && need.steps_from ? jsx("p", { className: "dockyard-meta", children: `From ${need.steps_from}` }) : null,
     need.steps ? jsx("p", { style: { whiteSpace: "pre-wrap" }, children: need.steps }) : null,
+    need.kind === "blocked_card" && !need.steps ? jsx("p", { children: `Next action not recorded. Ask ${need.assignee || "the project lead"} to record what will unblock this card.` }) : null,
     need.kind === "undispatched" ? jsx(Button, { variant: "primary", action: "fleet-open-dispatch", onClick: () => setOwning(true), children: "Dispatch" }) : null,
     need.ref ? jsx("h4", { children: "Waiting on" }) : null,
     need.ref ? jsx(FleetWait, {
@@ -8751,7 +8746,7 @@ function BacklogImportWizard(props) {
     runImport,
     api: api2
   } = props;
-  return !window.__V4_DISABLE?.has("wizard") ? jsxs("section", { className: "dockyard-modal-layer", "data-bulk-import-layer": true, hidden: !importOpen, children: [
+  return jsxs("section", { className: "dockyard-modal-layer", "data-bulk-import-layer": true, hidden: !importOpen, children: [
     jsxs("div", { className: "dockyard-modal dockyard-onboarding", role: "dialog", "aria-modal": true, "aria-labelledby": "dockyard-import-title", children: [
       jsxs("header", { className: "dockyard-onboarding-head", children: [
         jsxs("div", { children: [
@@ -8968,7 +8963,7 @@ function BacklogImportWizard(props) {
         ] })
       ] })
     ] })
-  ] }) : null;
+  ] });
 }
 
 // hermes_dockyard_plugin/desktop/src/views/backlog-model.js
@@ -9237,7 +9232,7 @@ function BacklogBoard(ctx) {
       jsx("button", { type: "button", "data-transfer-retry": operation.op_id, onClick: () => retryTransfer(operation.op_id), children: "Retry remaining items" })
     ] }, operation.op_id)),
     entries.length > 0 ? jsxs("section", { className: "dockyard-backlog-list", "data-backlog-table": true, children: [
-      !window.__V4_DISABLE?.has("cmdbar") ? jsxs("div", { className: "dockyard-cmdbar", "data-column-filters": true, children: [
+      jsxs("div", { className: "dockyard-cmdbar", "data-column-filters": true, children: [
         jsxs("label", { className: "cm-search", children: [
           jsx(Icon, { name: "search" }, "v4-search"),
           jsx("input", { type: "search", "data-cm-search": true, "aria-label": "Search backlog", placeholder: "Search backlog", value: search, onInput: (event) => setSearch(event.target.value) })
@@ -9370,8 +9365,8 @@ function BacklogBoard(ctx) {
           sortKey !== "rank" ? `sorted by ${sortLabels[sortKey]}` : "",
           groupBy !== "none" ? `grouped by ${GROUP_LABELS[groupBy]}` : ""
         ].filter(Boolean).join(" \xB7 "), children: treeRows.length === entries.length ? `${number(entries.length)} items` : `${number(treeRows.length)} of ${number(entries.length)}` })
-      ] }) : null,
-      !window.__V4_DISABLE?.has("head") ? jsxs("div", { className: "tree-head", children: [
+      ] }),
+      jsxs("div", { className: "tree-head", children: [
         jsx("span", { className: "th-gutter" }),
         sortHeader("rank", "Rank", "th-rank"),
         sortHeader("type", "Type", "th-type"),
@@ -9382,12 +9377,12 @@ function BacklogBoard(ctx) {
         sortHeader("age", "Age", "th-age"),
         jsx("span", { className: "th-reason", children: "Priority reason" }),
         jsx("span", { className: "th-act", "aria-label": "Actions" })
-      ] }) : null,
-      !window.__V4_DISABLE?.has("head") && treeRows.length === 0 ? jsxs("div", { className: "tree-group-head", "data-no-matches": true, children: [
+      ] }),
+      treeRows.length === 0 ? jsxs("div", { className: "tree-group-head", "data-no-matches": true, children: [
         jsx("span", { children: hasFilters ? "No items match the current search and filters." : "No backlog items to show." }),
         hasFilters ? jsx("button", { type: "button", className: "cm-chip", onClick: resetFilters, children: "Clear filters" }) : null
       ] }) : null,
-      ...window.__V4_DISABLE?.has("rows") ? [] : groups.flatMap(([label, rows], gi) => [
+      ...groups.flatMap(([label, rows], gi) => [
         label !== null ? jsxs("div", { className: "tree-group-head", children: [
           jsx("span", { children: label }),
           jsx("span", { className: "grp-count", children: `\xB7 ${rows.length}` })
@@ -9614,7 +9609,7 @@ function BacklogBoard(ctx) {
           }, ref);
         })
       ]),
-      !window.__V4_DISABLE?.has("popover") && bulkSelected.length ? jsxs("div", { className: "sel-pop", "data-selection-popover": true, onClick: (event) => event.stopPropagation(), children: [
+      bulkSelected.length ? jsxs("div", { className: "sel-pop", "data-selection-popover": true, onClick: (event) => event.stopPropagation(), children: [
         jsx("span", { className: "sel-count", children: `${bulkSelected.length} selected` }),
         jsx("span", { className: "sel-sep" }),
         jsxs("select", { "data-pop-target": true, "aria-label": "Bulk target", defaultValue: "", children: [
@@ -9650,7 +9645,7 @@ function BacklogBoard(ctx) {
       ] }) : null
     ] }) : q ? jsx(EmptyState, { title: "No matches", description: `Nothing in the backlog matches \u201C${search}\u201D. Clear the filter to see all items.`, icon: "project", children: jsx(Button, { small: true, onClick: () => setSearch(""), children: "Clear filter" }) }) : jsx(EmptyState, { title: "No ranked backlog items", description: "Work items appear here after they are added to the project backlog.", icon: "project" }),
     detailItem ? jsx(WorkItemDetail, { item: detailItem, projectId: project.id, profiles: view.profiles ?? [], initiatives: view.initiatives ?? [], onClose: () => setDetailItem(null), onRefresh }) : null,
-    !window.__V4_DISABLE?.has("wizard") ? jsx(BacklogImportWizard, {
+    jsx(BacklogImportWizard, {
       project,
       importOpen,
       importStep,
@@ -9676,7 +9671,7 @@ function BacklogBoard(ctx) {
       parseImport,
       runImport,
       api
-    }) : null,
+    }),
     jsx(BacklogReasonModal, { pendingMove, reason, setReason, error, saving, pendingParentItem, pendingParentRef, pendingParentChoices, pendingParentChanged, saveParent, saveMove, setPendingMove, typeLabel: typeLabel2 }),
     jsxs("section", {
       className: "dockyard-modal-layer",
@@ -10924,19 +10919,19 @@ function renderDoc(target, doc) {
   const blocks = doc && doc.type === "doc" && Array.isArray(doc.content) && doc.content.length ? doc.content : [{ type: "paragraph" }];
   for (const node of blocks) target.appendChild(renderBlock(node));
 }
-var closestIn = (host3, node, test) => {
+var closestIn = (host4, node, test) => {
   let el2 = node && node.nodeType === 3 ? node.parentElement : node;
-  while (el2 && el2 !== host3) {
+  while (el2 && el2 !== host4) {
     if (test(el2)) return el2;
     el2 = el2.parentElement;
   }
   return null;
 };
-var blockOf = (host3, node) => closestIn(host3, node, (el2) => /^(P|DIV|H[1-6]|LI)$/.test(el2.tagName));
-var listDepth = (host3, node) => {
+var blockOf = (host4, node) => closestIn(host4, node, (el2) => /^(P|DIV|H[1-6]|LI)$/.test(el2.tagName));
+var listDepth = (host4, node) => {
   let n = 0;
   let el2 = node && node.nodeType === 3 ? node.parentElement : node;
-  while (el2 && el2 !== host3) {
+  while (el2 && el2 !== host4) {
     if (el2.tagName === "UL" || el2.tagName === "OL") n += 1;
     el2 = el2.parentElement;
   }
@@ -10945,9 +10940,9 @@ var listDepth = (host3, node) => {
 var exec = (command, value) => document.execCommand(command, false, value);
 var RENAME = { B: "strong", I: "em", STRIKE: "s", DEL: "s" };
 var INNER_BLOCKS = /* @__PURE__ */ new Set(["P", "DIV", "H1", "H2", "H3", "UL", "OL"]);
-function normaliseDom(host3, { afterDelete = false } = {}) {
+function normaliseDom(host4, { afterDelete = false } = {}) {
   const sel = window.getSelection();
-  const keep = sel.rangeCount && host3.contains(sel.anchorNode) ? [sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset] : null;
+  const keep = sel.rangeCount && host4.contains(sel.anchorNode) ? [sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset] : null;
   const swap = (el2, tag) => {
     const next = document.createElement(tag);
     for (const attr of el2.attributes) if (attr.name === "style" || attr.name === "data-size" || attr.name === "class" || attr.name === "start" || attr.name === "type") next.setAttribute(attr.name, attr.value);
@@ -10960,7 +10955,7 @@ function normaliseDom(host3, { afterDelete = false } = {}) {
     el2.replaceWith(...el2.childNodes);
     changed = true;
   };
-  const walker = document.createTreeWalker(host3, 4);
+  const walker = document.createTreeWalker(host4, 4);
   for (let text2 = walker.nextNode(); text2; text2 = walker.nextNode()) {
     const value = text2.nodeValue || "";
     if (!value.includes("\u200B") || value.replace(ZWSP, "") === "") continue;
@@ -10972,30 +10967,30 @@ function normaliseDom(host3, { afterDelete = false } = {}) {
     text2.nodeValue = value.replace(ZWSP, "");
     changed = true;
   }
-  for (const el2 of [...host3.querySelectorAll("b, i, strike, del")]) {
+  for (const el2 of [...host4.querySelectorAll("b, i, strike, del")]) {
     swap(el2, RENAME[el2.tagName]);
     changed = true;
   }
-  for (const el2 of [...host3.children]) if (el2.tagName === "DIV") {
+  for (const el2 of [...host4.children]) if (el2.tagName === "DIV") {
     swap(el2, "p");
     changed = true;
   }
-  for (const el2 of [...host3.querySelectorAll("font, span:not([data-size])")]) unwrap(el2);
-  for (const el2 of [...host3.querySelectorAll("strong, em, u, s, [data-size]")]) {
+  for (const el2 of [...host4.querySelectorAll("font, span:not([data-size])")]) unwrap(el2);
+  for (const el2 of [...host4.querySelectorAll("strong, em, u, s, [data-size]")]) {
     if (el2.style && el2.style.length) {
       el2.removeAttribute("style");
       changed = true;
     }
   }
-  for (const el2 of [...host3.querySelectorAll("ul, ol")]) if (!el2.querySelector("li")) {
+  for (const el2 of [...host4.querySelectorAll("ul, ol")]) if (!el2.querySelector("li")) {
     el2.remove();
     changed = true;
   }
-  if (afterDelete && !host3.textContent.replace(ZWSP, "").trim() && host3.querySelector("ul, ol")) {
-    while (host3.firstChild) host3.removeChild(host3.firstChild);
+  if (afterDelete && !host4.textContent.replace(ZWSP, "").trim() && host4.querySelector("ul, ol")) {
+    while (host4.firstChild) host4.removeChild(host4.firstChild);
     const p = document.createElement("p");
     p.appendChild(document.createElement("br"));
-    host3.appendChild(p);
+    host4.appendChild(p);
     if (keep) {
       keep[0] = p;
       keep[1] = 0;
@@ -11004,7 +10999,7 @@ function normaliseDom(host3, { afterDelete = false } = {}) {
     }
     changed = true;
   }
-  for (const el2 of [...host3.querySelectorAll("li[style], li > p[style], li > h1[style], li > h2[style], li > h3[style]")]) {
+  for (const el2 of [...host4.querySelectorAll("li[style], li > p[style], li > h1[style], li > h2[style], li > h3[style]")]) {
     if (el2.style.textAlign) {
       el2.style.removeProperty("text-align");
       if (!el2.getAttribute("style")) el2.removeAttribute("style");
@@ -11012,7 +11007,7 @@ function normaliseDom(host3, { afterDelete = false } = {}) {
     }
   }
   for (let guard = 0; guard < 200; guard += 1) {
-    const outer = [...host3.querySelectorAll("p, h1, h2, h3")].find((el2) => [...el2.children].some((c) => INNER_BLOCKS.has(c.tagName)));
+    const outer = [...host4.querySelectorAll("p, h1, h2, h3")].find((el2) => [...el2.children].some((c) => INNER_BLOCKS.has(c.tagName)));
     if (!outer) break;
     let anchor = outer;
     let run = null;
@@ -11057,7 +11052,7 @@ var TOOLS = [
   ["justify", "Justify", { icon: "align-justify" }, () => exec("justifyFull"), (s) => s.align === "justify"]
 ];
 var POS_BLOCKS = /* @__PURE__ */ new Set(["P", "H1", "H2", "H3", "LI"]);
-function measure(host3, target, targetOffset) {
+function measure(host4, target, targetOffset) {
   let n = 0;
   const go = (el2) => {
     if (el2.nodeType === 3) {
@@ -11066,7 +11061,7 @@ function measure(host3, target, targetOffset) {
       return null;
     }
     if (el2.nodeType !== 1) return null;
-    if (el2 !== host3 && POS_BLOCKS.has(el2.tagName) && !(el2.tagName === "P" && el2.parentElement?.tagName === "LI")) n += 1;
+    if (el2 !== host4 && POS_BLOCKS.has(el2.tagName) && !(el2.tagName === "P" && el2.parentElement?.tagName === "LI")) n += 1;
     if (el2.tagName === "BR") n += 1;
     const kids = el2.childNodes;
     for (let i = 0; i < kids.length; i += 1) {
@@ -11076,12 +11071,12 @@ function measure(host3, target, targetOffset) {
     }
     return el2 === target ? n : null;
   };
-  const found = go(host3);
+  const found = go(host4);
   return found === null ? n : found;
 }
-function locate(host3, pos) {
+function locate(host4, pos) {
   let n = 0;
-  let last = [host3, 0];
+  let last = [host4, 0];
   const go = (el2) => {
     if (el2.nodeType === 3) {
       const len = el2.nodeValue.length;
@@ -11091,7 +11086,7 @@ function locate(host3, pos) {
       return null;
     }
     if (el2.nodeType !== 1) return null;
-    if (el2 !== host3 && POS_BLOCKS.has(el2.tagName) && !(el2.tagName === "P" && el2.parentElement?.tagName === "LI")) {
+    if (el2 !== host4 && POS_BLOCKS.has(el2.tagName) && !(el2.tagName === "P" && el2.parentElement?.tagName === "LI")) {
       n += 1;
       if (n >= pos && !el2.querySelector("li")) return [el2, 0];
     }
@@ -11105,22 +11100,22 @@ function locate(host3, pos) {
     }
     return null;
   };
-  return go(host3) || last;
+  return go(host4) || last;
 }
 var MARK_TAGS = /* @__PURE__ */ new Set(["STRONG", "B", "EM", "I", "U", "S", "STRIKE", "DEL"]);
 var isMark = (el2) => MARK_TAGS.has(el2.tagName) || el2.hasAttribute?.("data-size");
-function selectedTexts(host3) {
+function selectedTexts(host4) {
   const sel = window.getSelection();
   if (!sel.rangeCount) return [];
   const range = sel.getRangeAt(0);
-  if (range.collapsed || !host3.contains(range.commonAncestorContainer)) return [];
+  if (range.collapsed || !host4.contains(range.commonAncestorContainer)) return [];
   const { endContainer: ec, endOffset: eo } = range;
   if (ec.nodeType === 3 && eo > 0 && eo < ec.nodeValue.length) ec.splitText(eo);
   const { startContainer: sc, startOffset: so } = range;
   let first = null;
   if (sc.nodeType === 3 && so > 0 && so < sc.nodeValue.length) first = sc.splitText(so);
   const out = [];
-  const walker = document.createTreeWalker(host3, 4);
+  const walker = document.createTreeWalker(host4, 4);
   for (let text2 = walker.nextNode(); text2; text2 = walker.nextNode()) {
     if (!text2.nodeValue || !range.intersectsNode(text2)) continue;
     if (text2 === sc && !first && so >= text2.nodeValue.length) continue;
@@ -11149,9 +11144,9 @@ function splitAround(outer, node) {
   if (head.textContent) outer.before(head);
   if (tail.textContent) outer.after(tail);
 }
-function liftOut(host3, node, test) {
+function liftOut(host4, node, test) {
   for (let guard = 0; guard < 20; guard += 1) {
-    const outer = closestIn(host3, node, test);
+    const outer = closestIn(host4, node, test);
     if (!outer || POS_BLOCKS.has(outer.tagName)) return;
     splitAround(outer, node);
     outer.replaceWith(...outer.childNodes);
@@ -11163,12 +11158,12 @@ var sizeSpan = (size) => {
   span.className = `dy-rt-${size}`;
   return span;
 };
-var blocksIn = (host3) => {
+var blocksIn = (host4) => {
   const sel = window.getSelection();
   if (!sel.rangeCount) return [];
   const range = sel.getRangeAt(0);
-  const caretBlock = blockOf(host3, range.startContainer);
-  const endBlock = blockOf(host3, range.endContainer);
+  const caretBlock = blockOf(host4, range.startContainer);
+  const endBlock = blockOf(host4, range.endContainer);
   let skip = null;
   if (endBlock && endBlock !== caretBlock) {
     const head = document.createRange();
@@ -11176,23 +11171,23 @@ var blocksIn = (host3) => {
     head.setEnd(range.endContainer, range.endOffset);
     if (head.toString() === "") skip = endBlock;
   }
-  const all = [...host3.querySelectorAll("p, h1, h2, h3, li")].filter((el2) => el2 !== skip && range.intersectsNode(el2) && !(skip && skip.contains(el2)));
+  const all = [...host4.querySelectorAll("p, h1, h2, h3, li")].filter((el2) => el2 !== skip && range.intersectsNode(el2) && !(skip && skip.contains(el2)));
   return all.length ? all : caretBlock ? [caretBlock] : [];
 };
-function setBlockStyle(host3, style) {
+function setBlockStyle(host4, style) {
   const sel = window.getSelection();
   if (style !== "p" && sel.rangeCount) {
     for (let guard = 0; guard < MAX_LIST_LEVELS + 1; guard += 1) {
-      if (!closestIn(host3, sel.anchorNode, (el2) => el2.tagName === "LI")) break;
+      if (!closestIn(host4, sel.anchorNode, (el2) => el2.tagName === "LI")) break;
       exec("outdent");
     }
   }
   exec("formatBlock", style);
 }
-function clearFormatting(host3) {
-  const texts = selectedTexts(host3);
-  const blocks = blocksIn(host3);
-  for (const text2 of texts) liftOut(host3, text2, isMark);
+function clearFormatting(host4) {
+  const texts = selectedTexts(host4);
+  const blocks = blocksIn(host4);
+  for (const text2 of texts) liftOut(host4, text2, isMark);
   for (const block of blocks) {
     block.style.removeProperty("text-align");
     if (!block.getAttribute("style")) block.removeAttribute("style");
@@ -11205,15 +11200,15 @@ function clearFormatting(host3) {
   }
   reselect(texts);
 }
-function stateAt(host3) {
+function stateAt(host4) {
   const empty = { style: "p", size: "normal", align: "left", list: null, bold: false, italic: false, underline: false, strike: false };
   const sel = typeof window !== "undefined" ? window.getSelection() : null;
-  if (!host3 || !sel || !sel.rangeCount || !host3.contains(sel.anchorNode)) return empty;
+  if (!host4 || !sel || !sel.rangeCount || !host4.contains(sel.anchorNode)) return empty;
   const node = sel.anchorNode;
-  const heading = closestIn(host3, node, (el2) => /^H[1-3]$/.test(el2.tagName));
-  const sized = closestIn(host3, node, (el2) => el2.hasAttribute("data-size"));
-  const list = closestIn(host3, node, (el2) => el2.tagName === "UL" || el2.tagName === "OL");
-  const block = blockOf(host3, node);
+  const heading = closestIn(host4, node, (el2) => /^H[1-3]$/.test(el2.tagName));
+  const sized = closestIn(host4, node, (el2) => el2.hasAttribute("data-size"));
+  const list = closestIn(host4, node, (el2) => el2.tagName === "UL" || el2.tagName === "OL");
+  const block = blockOf(host4, node);
   const align = !list && block && alignOf(block) || "left";
   const q = (c) => {
     try {
@@ -11222,25 +11217,25 @@ function stateAt(host3) {
       return false;
     }
   };
-  const has = (tags) => Boolean(closestIn(host3, node, (el2) => tags.includes(el2.tagName)));
+  const has = (tags) => Boolean(closestIn(host4, node, (el2) => tags.includes(el2.tagName)));
   return {
     style: heading ? heading.tagName.toLowerCase() : "p",
     size: sized && RICH_TEXT_SIZES.includes(sized.getAttribute("data-size")) ? sized.getAttribute("data-size") : "normal",
     align,
     list: list ? list.tagName : null,
-    anyList: Boolean(list) || blocksIn(host3).some((b) => closestIn(host3, b, (el2) => el2.tagName === "UL" || el2.tagName === "OL")),
+    anyList: Boolean(list) || blocksIn(host4).some((b) => closestIn(host4, b, (el2) => el2.tagName === "UL" || el2.tagName === "OL")),
     bold: has(["STRONG", "B"]) || !heading && q("bold"),
     italic: has(["EM", "I"]) || q("italic"),
     underline: has(["U"]) || q("underline"),
     strike: has(["S", "STRIKE", "DEL"]) || q("strikeThrough")
   };
 }
-function applySize(host3, size) {
+function applySize(host4, size) {
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
   const range = sel.getRangeAt(0);
   if (range.collapsed) {
-    const current = closestIn(host3, range.startContainer, (el2) => el2.hasAttribute("data-size"));
+    const current = closestIn(host4, range.startContainer, (el2) => el2.hasAttribute("data-size"));
     const marker = document.createTextNode("\u200B");
     if (size === "normal") {
       if (!current) return;
@@ -11258,9 +11253,9 @@ function applySize(host3, size) {
     sel.addRange(caret);
     return;
   }
-  const texts = selectedTexts(host3);
+  const texts = selectedTexts(host4);
   for (const text2 of texts) {
-    liftOut(host3, text2, (el2) => el2.hasAttribute("data-size"));
+    liftOut(host4, text2, (el2) => el2.hasAttribute("data-size"));
     if (size !== "normal") {
       const span = sizeSpan(size);
       text2.before(span);
@@ -11270,7 +11265,7 @@ function applySize(host3, size) {
   reselect(texts);
 }
 function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOnly, label = "Description" }) {
-  const host3 = useRef(null);
+  const host4 = useRef(null);
   const saved = useRef(null);
   const changeRef = useRef(onChange);
   const problemRef = useRef(onProblem);
@@ -11284,13 +11279,13 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
   changeRef.current = onChange;
   problemRef.current = onProblem;
   const refresh = () => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     const sel = window.getSelection();
     if (el2 && sel.rangeCount && el2.contains(sel.anchorNode)) saved.current = sel.getRangeAt(0).cloneRange();
     setState(stateAt(el2));
   };
   const caretNow = () => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     const sel = window.getSelection();
     if (!el2 || !sel.rangeCount || !el2.contains(sel.anchorNode)) return [0, 0];
     return [measure(el2, sel.anchorNode, sel.anchorOffset), measure(el2, sel.focusNode, sel.focusOffset)];
@@ -11322,7 +11317,7 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     }
   };
   const emit = (typing = false) => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     if (!el2) return;
     normaliseDom(el2, { afterDelete: typing === "delete" });
     const doc = domToDoc(el2);
@@ -11332,7 +11327,7 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     refresh();
   };
   const travel = (step) => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     const h = history.current;
     const next = h.index + step;
     if (!el2 || readOnly || next < 0 || next >= h.stack.length) return;
@@ -11352,7 +11347,7 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     refresh();
   };
   useEffect(() => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     renderDoc(el2, value && value.type === "doc" ? value : plainToDoc(fallbackText));
     try {
       exec("defaultParagraphSeparator", "p");
@@ -11381,10 +11376,10 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     };
   }, []);
   useEffect(() => {
-    if (host3.current && history.current.stack.length) report(domToDoc(host3.current));
+    if (host4.current && history.current.stack.length) report(domToDoc(host4.current));
   }, [restSize]);
   const run = (act) => {
-    const el2 = host3.current;
+    const el2 = host4.current;
     if (!el2 || readOnly) return;
     el2.focus();
     if (saved.current) {
@@ -11407,11 +11402,11 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     }
     if (event.key === "Tab") {
       const sel = window.getSelection();
-      const li = sel.rangeCount ? closestIn(host3.current, sel.anchorNode, (n) => n.tagName === "LI") : null;
+      const li = sel.rangeCount ? closestIn(host4.current, sel.anchorNode, (n) => n.tagName === "LI") : null;
       if (!li) return;
       event.preventDefault();
       if (event.shiftKey) exec("outdent");
-      else if (listDepth(host3.current, li) < MAX_LIST_LEVELS) exec("indent");
+      else if (listDepth(host4.current, li) < MAX_LIST_LEVELS) exec("indent");
       emit();
     }
   };
@@ -11428,9 +11423,9 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     if (scratch.childNodes.length === 1 && scratch.firstChild.tagName === "P") frag.append(...scratch.firstChild.childNodes);
     else frag.append(...scratch.childNodes);
     const last = frag.lastChild;
-    const line = blockOf(host3.current, range.startContainer);
+    const line = blockOf(host4.current, range.startContainer);
     const blocks = frag.firstChild && frag.firstChild.nodeType === 1 && /^(P|H[1-3]|UL|OL)$/.test(frag.firstChild.tagName);
-    if (blocks && line && line.parentNode === host3.current && !line.textContent.replace(ZWSP, "")) line.replaceWith(frag);
+    if (blocks && line && line.parentNode === host4.current && !line.textContent.replace(ZWSP, "")) line.replaceWith(frag);
     else range.insertNode(frag);
     if (last) {
       const caret = document.createRange();
@@ -11447,7 +11442,7 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     if (!data) return;
     event.preventDefault();
     const sel = window.getSelection();
-    if (!sel.rangeCount || !host3.current.contains(sel.anchorNode)) return;
+    if (!sel.rangeCount || !host4.current.contains(sel.anchorNode)) return;
     insertData(data, sel.getRangeAt(0));
   };
   const onDrop = (event) => {
@@ -11460,13 +11455,13 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     const data = event.dataTransfer;
     if (!data) return;
     const at = document.caretRangeFromPoint ? document.caretRangeFromPoint(event.clientX, event.clientY) : null;
-    const range = at && host3.current.contains(at.startContainer) ? at : (() => {
+    const range = at && host4.current.contains(at.startContainer) ? at : (() => {
       const r = document.createRange();
-      r.selectNodeContents(host3.current);
+      r.selectNodeContents(host4.current);
       r.collapse(false);
       return r;
     })();
-    host3.current.focus();
+    host4.current.focus();
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
@@ -11535,7 +11530,7 @@ function RichTextEditor({ value, fallbackText, onChange, onProblem, rest, readOn
     ] }),
     problem ? jsx("p", { className: "dy-rt-problem", role: "alert", "data-canvas-rich-problem": true, children: problem }) : null,
     jsx("div", { className: `dy-rt-host${readOnly ? " readonly" : ""}`, children: jsx("div", {
-      ref: host3,
+      ref: host4,
       className: "dy-rt-body",
       "data-canvas-rich-text": "true",
       role: "textbox",
@@ -13807,7 +13802,10 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
       children: [
         jsx("span", { role: "cell", children: jsx("button", { type: "button", className: "dockyard-button small", onClick: () => onOpen?.(`s1:project/${project.project_id}`), children: project.project_id }) }),
         jsx("span", { role: "cell", children: project.owner || "Not assigned" }),
-        jsx("span", { role: "cell", className: `dockyard-command-health ${project.status}`, children: status }),
+        jsxs("span", { role: "cell", className: `dockyard-command-health ${project.status}`, children: [
+          status,
+          jsx("small", { className: "dockyard-meta", style: { display: "block" }, children: project.evidence_checked_at ? `Objectives checked ${formatWhen(project.evidence_checked_at)}` : project.evidence_freshness_days != null ? `Objectives checked ${project.evidence_freshness_days}d ago` : "Objectives not checked yet" })
+        ] }),
         jsxs("span", { role: "cell", className: "dockyard-command-progress", children: [
           jsx("span", { children: unreadable ? "Unknown (not linked)" : total ? `${number(done)} / ${number(total)} work items` : "No work items" }),
           jsx("span", { className: "dockyard-command-progress-track", children: jsx("span", { style: { width: `${total ? Math.round(done / total * 100) : 0}%` } }) })
@@ -13839,7 +13837,7 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
         })
       ] }),
       jsxs("section", { className: "dockyard-command-section dockyard-command-directory-list", role: "table", "aria-label": "Project fleet", children: [
-        jsx("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: ["Project", "Owner", "Health", "Progress", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label)) }),
+        jsx("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: ["Project", "Owner", "Delivery / evidence", "Work completed", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label)) }),
         filtered.length ? filtered.map(renderProjectRow) : jsx("p", { className: "dockyard-command-empty", children: "No projects match this filter." })
       ] })
     ] });
@@ -13989,7 +13987,11 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
                 children: [
                   jsx("span", { className: `dockyard-command-type ${issueLabels(item).tone}`, children: issueLabels(item).tag }),
                   jsxs("span", { className: "dockyard-command-title", children: [jsx("strong", { children: item.title }), jsx("small", { children: item.ref || item.detail || "" })] }),
-                  jsx("span", { children: item.project }),
+                  jsxs("span", { children: [item.project, item.fleet ? jsx("small", {
+                    className: "dockyard-meta",
+                    style: { display: "block" },
+                    children: item.fleet.card_id || item.fleet.kind === "undispatched" ? `Owner: ${item.fleet.assignee || item.fleet.owner || "Unassigned"}` : `Lead: ${projects.find((project) => project.project_id === item.project)?.owner || "Not assigned"}`
+                  }) : null] }),
                   jsx("span", { children: issueLabels(item).impact }),
                   jsx("span", { children: typeof item.age_days === "number" ? `${number(item.age_days)}d` : "Not recorded" })
                 ]
@@ -14003,7 +14005,7 @@ function DashboardView({ view, onInbox, onRefresh, onOpen, resetView }) {
             ] }),
             jsxs("div", { className: "dockyard-command-table-wrap", role: "table", "aria-label": "Project fleet", children: [
               jsxs("div", { className: "dockyard-command-row dockyard-command-project-head", role: "row", children: [
-                ...["Project", "Owner", "Health", "Progress", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label))
+                ...["Project", "Owner", "Delivery / evidence", "Work completed", "Next milestone", "Delivery risk"].map((label) => jsx("span", { role: "columnheader", children: label }, label))
               ] }),
               projects.map(renderProjectRow)
             ] })
@@ -14532,10 +14534,10 @@ function buildLayout(nodes, opts) {
   };
 }
 var canvasSeq = 0;
-function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pollMs = 8e3) {
-  host3.replaceChildren();
-  host3.className = "dy-wf dy-wf-scope";
-  const canvasWindow = host3.ownerDocument?.defaultView ?? globalThis.window;
+function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pollMs = 8e3) {
+  host4.replaceChildren();
+  host4.className = "dy-wf dy-wf-scope";
+  const canvasWindow = host4.ownerDocument?.defaultView ?? globalThis.window;
   const wrap = elu("div", "dy-wf-wrap");
   const svg = sEl("svg", { class: "dy-wf-svg" });
   svg.setAttribute("data-lod", "read");
@@ -14647,12 +14649,12 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     const on = motionButton.getAttribute("aria-pressed") === "true";
     motionButton.setAttribute("aria-pressed", String(!on));
     motionButton.textContent = on ? "Motion off" : "Motion on";
-    host3.classList.toggle("dy-wf-still", on);
+    host4.classList.toggle("dy-wf-still", on);
   });
   playbackBar.append(playbackButton, playbackSlider, playbackLabel, motionButton);
   wrap.append(svg, feed, minimap, passport, zoomBar, listView, playbackBar, openHint, help);
   playbackBar.style.overflowX = "auto";
-  host3.appendChild(wrap);
+  host4.appendChild(wrap);
   let panX = 0;
   let panY = 0;
   let zoom = 1;
@@ -15197,7 +15199,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     }
     if (playbackLabel) playbackLabel.textContent = playbackIndex === null ? timeline.length ? `Live \xB7 ${timeline.length} events` : "Live" : `Event ${playbackIndex + 1}/${timeline.length}`;
     renderList(run);
-    const active = host3.ownerDocument?.activeElement ?? null;
+    const active = host4.ownerDocument?.activeElement ?? null;
     const focusedId = active && viewport.contains(active) ? active.closest(".dy-wf-node")?.getAttribute("data-node-id") ?? null : null;
     viewport.replaceChildren();
     viewport.appendChild(defs);
@@ -15727,7 +15729,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     if (e.target?.closest?.(".dy-wf-node")) return;
     hideHint();
     dragging = true;
-    host3.classList.add("dy-wf-panning");
+    host4.classList.add("dy-wf-panning");
     lastX = e.clientX;
     lastY = e.clientY;
     const target = e.target;
@@ -15755,7 +15757,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     if (dragSession) {
       endDragSession(e, true);
       dragging = false;
-      host3.classList.remove("dy-wf-panning");
+      host4.classList.remove("dy-wf-panning");
       return;
     }
     if (connectFrom) {
@@ -15772,7 +15774,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     if (dragSession) endDragSession(e, false);
     cancelConnect();
     dragging = false;
-    host3.classList.remove("dy-wf-panning");
+    host4.classList.remove("dy-wf-panning");
     try {
       svg.releasePointerCapture(e.pointerId);
     } catch {
@@ -15788,9 +15790,9 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     const cx = (ev.clientX - rect.left) / sx;
     const cy = (ev.clientY - rect.top) / sy;
     cameraSet = true;
-    host3.classList.add("dy-wf-panning");
+    host4.classList.add("dy-wf-panning");
     if (wheelSettle) clearTimeout(wheelSettle);
-    wheelSettle = setTimeout(() => host3.classList.remove("dy-wf-panning"), 160);
+    wheelSettle = setTimeout(() => host4.classList.remove("dy-wf-panning"), 160);
     const factor = ev.deltaY < 0 ? ZOOM_IN : ZOOM_OUT;
     const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom * factor));
     const k = next / zoom;
@@ -16006,11 +16008,11 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     } else updateMinimap();
   };
   canvasWindow.addEventListener("resize", onResize);
-  let lastHostWidth = host3.clientWidth;
+  let lastHostWidth = host4.clientWidth;
   let resizeFrame = 0;
   const RO = canvasWindow.ResizeObserver;
   const hostObserver = RO ? new RO(() => {
-    const w = host3.clientWidth;
+    const w = host4.clientWidth;
     if (w === lastHostWidth) return;
     lastHostWidth = w;
     if (resizeFrame) canvasWindow.cancelAnimationFrame(resizeFrame);
@@ -16019,7 +16021,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
       onResize();
     });
   }) : null;
-  hostObserver?.observe(host3);
+  hostObserver?.observe(host4);
   disposers.push(() => {
     disposed = true;
     if (timer) clearInterval(timer);
@@ -16031,7 +16033,7 @@ function mountWorkflowCanvas(host3, projectId, runName, fetchRuns, handlers, pol
     canvasWindow.removeEventListener("resize", onResize);
     hostObserver?.disconnect();
     if (resizeFrame) canvasWindow.cancelAnimationFrame(resizeFrame);
-    host3.replaceChildren();
+    host4.replaceChildren();
   });
   const dispose = () => {
     disposers.forEach((d) => d());
@@ -16087,7 +16089,7 @@ var toCanvasRun = (run) => ({
     ts: event.ts
   }))
 });
-function mountDesktopWorkflowCanvas(host3, projectId, workflowName, definition, runs, handlers = {}) {
+function mountDesktopWorkflowCanvas(host4, projectId, workflowName, definition, runs, handlers = {}) {
   const read2 = (value) => typeof value === "function" ? value() : value;
   const fetchRuns = async () => {
     const mapped = (read2(runs) ?? []).map(toCanvasRun);
@@ -16095,7 +16097,7 @@ function mountDesktopWorkflowCanvas(host3, projectId, workflowName, definition, 
     const nodes = (read2(definition)?.nodes ?? []).map(toCanvasNode);
     return [{ run_key: `definition:${workflowName}`, version: 0, status: "definition", started_at: null, updated_at: null, nodes }];
   };
-  return mountWorkflowCanvas(host3, projectId, workflowName, fetchRuns, {
+  return mountWorkflowCanvas(host4, projectId, workflowName, fetchRuns, {
     onApprove: handlers.onApprove ?? (() => void 0),
     onReject: handlers.onReject ?? (() => void 0),
     onRetry: handlers.onRetry,
@@ -19322,14 +19324,14 @@ function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpenLibrary
     onEditFrame: (nodeId, rect) => setRepeatAt({ nodeId, rect })
   });
   const fitCanvasHeight = () => {
-    const host3 = canvasRef.current;
-    if (!host3) return;
+    const host4 = canvasRef.current;
+    if (!host4) return;
     if (window.innerWidth <= 640) {
-      host3.style.height = "";
+      host4.style.height = "";
       return;
     }
-    const top = host3.getBoundingClientRect().top + window.scrollY;
-    host3.style.height = `${Math.max(360, Math.round(window.innerHeight - top - 12))}px`;
+    const top = host4.getBoundingClientRect().top + window.scrollY;
+    host4.style.height = `${Math.max(360, Math.round(window.innerHeight - top - 12))}px`;
   };
   useEffect(() => {
     const onResize = () => fitCanvasHeight();
@@ -19337,13 +19339,13 @@ function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpenLibrary
     return () => window.removeEventListener("resize", onResize);
   }, []);
   const growForPanel = () => {
-    const host3 = canvasRef.current;
-    if (!host3 || window.innerWidth <= 640) return;
-    const stage = host3.closest(".dockyard-wf3-stage");
+    const host4 = canvasRef.current;
+    if (!host4 || window.innerWidth <= 640) return;
+    const stage = host4.closest(".dockyard-wf3-stage");
     const toolbar = stage?.querySelector(".dockyard-wf3-toolbar");
     const want = Math.min(820, Math.round(window.innerHeight - (toolbar?.getBoundingClientRect().height ?? 0) - 24));
-    if (host3.getBoundingClientRect().height >= want - 4) return;
-    host3.style.height = `${want}px`;
+    if (host4.getBoundingClientRect().height >= want - 4) return;
+    host4.style.height = `${want}px`;
     stage?.scrollIntoView({ block: "start" });
   };
   const onSelectStep = (nodeId) => {
@@ -19854,7 +19856,7 @@ function ProjectContentPanel({ project, content, onRefresh }) {
       jsx("span", { className: "dockyard-card-label", children: "PREVIEW" }),
       selected ? jsx("h2", { children: selected.filename }) : jsx("h2", { children: "Select a document" }),
       previewState === "loading" ? jsx("p", { children: "Loading preview..." }) : null,
-      previewState === "ready" && selected?.preview_kind === "text" ? jsx("pre", { "data-content-preview": true, className: "dockyard-content-preview", children: selected.text || "This text file is empty." }) : previewState === "ready" && selected?.preview_kind === "image" && selected.data_base64 ? jsx("img", { "data-content-preview": true, "data-preview-kind": "image", className: "dockyard-content-image", alt: selected.filename, src: `data:${selected.media_type};base64,${selected.data_base64}` }) : previewState === "ready" && selected?.preview_kind === "pdf" && mediaUrl ? jsx("iframe", { "data-content-preview": true, "data-preview-kind": "pdf", className: "dockyard-content-pdf", title: `PDF preview: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" && selected?.preview_kind === "video" && mediaUrl ? jsx("video", { "data-content-preview": true, "data-preview-kind": "video", className: "dockyard-content-video", controls: true, preload: "metadata", "aria-label": `Video: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" ? jsx("div", { "data-content-preview": true, className: "dockyard-report-placeholder", children: `Preview is not available for ${mediaTypeLabel(selected?.media_type)}. File metadata remains visible.` }) : previewState === "idle" ? jsx("p", { className: "dockyard-meta", children: "Text, Markdown, images, PDFs and videos show here." }) : null,
+      previewState === "ready" && selected?.preview_kind === "text" ? jsx("pre", { "data-content-preview": true, className: "dockyard-content-preview", children: selected.text || "This text file is empty." }) : previewState === "ready" && selected?.preview_kind === "image" && selected.data_base64 ? jsx("img", { "data-content-preview": true, "data-preview-kind": "image", className: "dockyard-content-image", alt: selected.filename, src: `data:${selected.media_type};base64,${selected.data_base64}` }) : previewState === "ready" && selected?.preview_kind === "pdf" && mediaUrl ? jsx("iframe", { "data-content-preview": true, "data-preview-kind": "pdf", className: "dockyard-content-pdf", title: `PDF preview: ${selected.filename}`, src: mediaUrl, sandbox: "allow-same-origin" }) : previewState === "ready" && selected?.preview_kind === "video" && mediaUrl ? jsx("video", { "data-content-preview": true, "data-preview-kind": "video", className: "dockyard-content-video", controls: true, preload: "metadata", "aria-label": `Video: ${selected.filename}`, src: mediaUrl }) : previewState === "ready" ? jsx("div", { "data-content-preview": true, className: "dockyard-report-placeholder", children: `Preview is not available for ${mediaTypeLabel(selected?.media_type)}. File metadata remains visible.` }) : previewState === "idle" ? jsx("p", { className: "dockyard-meta", children: "Text, Markdown, images, PDFs and videos show here." }) : null,
       selected ? jsxs("div", { className: "dockyard-form-actions", children: [
         selected.archived_at ? jsx(Button, { action: "restore-project-content", disabled: actionBusy, onClick: () => setContentAction("restore"), children: "Restore" }) : jsx(Button, { action: "archive-project-content", disabled: actionBusy, onClick: () => setContentAction("archive"), children: "Archive" }),
         jsx(Button, { action: "remove-project-content", variant: "danger", disabled: actionBusy, onClick: () => setContentAction("remove"), children: "Remove file" })
@@ -23035,8 +23037,8 @@ function chatRoute(routes, activeConnectionId, profile) {
   const list = (Array.isArray(routes) ? routes : []).filter((route) => route?.connectionId === activeConnectionId);
   return list.find((route) => route?.targetProfile === profile) ?? list.find((route) => route?.profile === profile) ?? null;
 }
-async function openProjectChat({ host: host3, api: api2, projectId, profile }) {
-  if (typeof host3?.newChat !== "function") return { opened: false, reason: "unsupported" };
+async function openProjectChat({ host: host4, api: api2, projectId, profile }) {
+  if (typeof host4?.newChat !== "function") return { opened: false, reason: "unsupported" };
   let linked = false;
   try {
     await api2(`/projects/${encodeURIComponent(projectId)}/chat-links`, { method: "POST", body: { profile }, quiet: true });
@@ -23046,13 +23048,13 @@ async function openProjectChat({ host: host3, api: api2, projectId, profile }) {
   }
   let route = null;
   try {
-    if (typeof host3.profileRoutes === "function") {
-      route = chatRoute(await host3.profileRoutes(), host3.activeConnectionId?.() ?? null, profile);
+    if (typeof host4.profileRoutes === "function") {
+      route = chatRoute(await host4.profileRoutes(), host4.activeConnectionId?.() ?? null, profile);
     }
   } catch {
     route = null;
   }
-  host3.newChat(route ? { ...route } : profile);
+  host4.newChat(route ? { ...route } : profile);
   return { opened: true, linked, via: route ? "route" : "profile" };
 }
 function chatOutcomeMessage(profile, outcome) {
@@ -24482,16 +24484,6 @@ function InboxView({ view, onRefresh, focusRef = null, onOpenProject }) {
     if (!focusRef) return;
     if (items.some((item) => item.ref === focusRef)) setSelectedRef(focusRef);
   }, [focusRef, items]);
-  useEffect(() => {
-    const handle = (event) => {
-      const link = event.detail;
-      if (typeof link !== "string" || !link.startsWith("s6:initiative/")) return;
-      const ref = link.slice("s6:initiative/".length);
-      if (items.some((item) => item.ref === ref)) setSelectedRef(ref);
-    };
-    window.addEventListener("dockyard:test:deeplink", handle);
-    return () => window.removeEventListener("dockyard:test:deeplink", handle);
-  }, [items]);
   useEffect(() => {
     const close = (event) => {
       if (event.key !== "Escape" || !selectedRef) return;
@@ -26358,7 +26350,32 @@ function hiddenNotifications(view, projectId) {
   return (view.notifications ?? []).filter((note) => ownerOf(note) !== projectId).length;
 }
 
+// hermes_dockyard_plugin/desktop/src/runtime/host-theme.js
+import * as sdk from "@hermes/plugin-sdk";
+var noHostTheme = () => null;
+var useSdkTheme = typeof sdk.useTheme === "function" ? sdk.useTheme : noHostTheme;
+var systemQuery = () => window.matchMedia?.("(prefers-color-scheme: dark)");
+function systemIsDark() {
+  return Boolean(systemQuery()?.matches);
+}
+function hostThemeMode(value) {
+  const mode = value?.renderedMode ?? value?.resolvedMode;
+  return mode === "dark" || mode === "light" ? mode : null;
+}
+function useHostDark() {
+  const hostMode = hostThemeMode(useSdkTheme());
+  const [systemDark, setSystemDark] = useState(systemIsDark);
+  useEffect(() => {
+    const media = systemQuery();
+    const read2 = () => setSystemDark(systemIsDark());
+    media?.addEventListener?.("change", read2);
+    return () => media?.removeEventListener?.("change", read2);
+  }, []);
+  return hostMode ? hostMode === "dark" : systemDark;
+}
+
 // hermes_dockyard_plugin/desktop/src/shell/dashboard-page.js
+import { host as host2 } from "@hermes/plugin-sdk";
 var ONE_PROJECT_TABS = Object.freeze({ project: "Projects", backlog: "Backlog" });
 function DashboardPage({ inboxCss = "" } = {}) {
   useDockyardStyles();
@@ -26372,7 +26389,7 @@ function DashboardPage({ inboxCss = "" } = {}) {
     loadArchivedProjects().then((rows) => setArchivedCount(rows.length), () => setArchivedCount(0));
   };
   const [appearance, setAppearance] = useState({ theme: DEFAULT_THEME, font: DEFAULT_FONT });
-  const [hostDark, setHostDark] = useState(() => hostIsDark());
+  const hostDark = useHostDark();
   const [hostDesktop] = useState(() => hostIsDesktop());
   const appearanceAsked = useRef(false);
   const askAppearance = () => {
@@ -26387,17 +26404,6 @@ function DashboardPage({ inboxCss = "" } = {}) {
       // unavailable: the defaults stand
     );
   };
-  useEffect(() => {
-    const read2 = () => setHostDark(hostIsDark());
-    const watcher = typeof MutationObserver === "function" ? new MutationObserver(read2) : null;
-    watcher?.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-hermes-mode"] });
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    media?.addEventListener?.("change", read2);
-    return () => {
-      watcher?.disconnect();
-      media?.removeEventListener?.("change", read2);
-    };
-  }, []);
   const appearanceRef = useRef(appearance);
   appearanceRef.current = appearance;
   const changeAppearance = async (patch) => {
@@ -26526,7 +26532,7 @@ function DashboardPage({ inboxCss = "" } = {}) {
       (result) => {
         if (mounted.current && result?.projects) adoptProjects(result.projects, serial);
         if (!current || serial !== loadSerial.current) return;
-        setData({ tab, projectId: selectedProject, payload: result });
+        setData({ tab, projectId: selectedProject, payload: result, refreshedAt: (/* @__PURE__ */ new Date()).toISOString() });
         if (tab === "dashboard") {
           setCounts({
             approvals: Number(result.inbox?.count ?? result.owed_decisions ?? 0),
@@ -26800,6 +26806,8 @@ function DashboardPage({ inboxCss = "" } = {}) {
     ] });
   }
   const theme = themeById(appearance.theme);
+  const connection = host2.activeConnectionId?.() || (hostDesktop ? "Current Hermes backend" : window.location.host);
+  const profile = hostDesktop ? null : new URLSearchParams(window.location.search).get("profile");
   return jsxs("div", {
     className: "dockyard-root",
     "data-theme": themeMode(theme.id, hostDark),
@@ -26821,6 +26829,17 @@ function DashboardPage({ inboxCss = "" } = {}) {
           onOpen: openDeepLink,
           archivedCount,
           onOpenArchived: () => setArchivedOpen(true)
+        }),
+        jsx("p", {
+          className: "dockyard-meta",
+          "data-connection-context": true,
+          style: { paddingInline: 20, overflowWrap: "anywhere" },
+          children: [
+            `Connection: ${connection}`,
+            profile ? `Profile: ${profile}` : null,
+            "Shared project data",
+            data?.refreshedAt ? `View refreshed ${formatWhen(data.refreshedAt)}` : null
+          ].filter(Boolean).join(" \xB7 ")
         }),
         jsx("main", {
           id: "dockyard-panel",
@@ -26864,11 +26883,11 @@ function DashboardPage({ inboxCss = "" } = {}) {
 var POPUP_INTERVAL_MS = 6e4;
 var POPUP_CAP = 3;
 function openDockyard() {
-  host2?.navigate?.("/dockyard");
+  host3?.navigate?.("/dockyard");
 }
 function surfacePopup(item) {
   const text2 = String(item?.body ?? "").trim();
-  host2.notify({
+  host3.notify({
     id: `dockyard-notification-${item?.id}`,
     kind: "info",
     title: item?.title ?? "Fleet notification",
@@ -26877,7 +26896,7 @@ function surfacePopup(item) {
   });
 }
 function surfaceMore(count) {
-  host2.notify({
+  host3.notify({
     id: "dockyard-notification-more",
     kind: "info",
     title: `and ${count} more notification${count === 1 ? "" : "s"}`,
@@ -26886,7 +26905,7 @@ function surfaceMore(count) {
   });
 }
 function startPopupPoller(ctxRest) {
-  if (typeof host2?.notify !== "function") return;
+  if (typeof host3?.notify !== "function") return;
   if (typeof window === "undefined" || window.__dockyardPopupPoller) return;
   const surfaced = /* @__PURE__ */ new Set();
   const tick = async () => {
@@ -26911,6 +26930,15 @@ function startPopupPoller(ctxRest) {
   const interval = Number(window.__dockyardPopupIntervalMs) > 0 ? Number(window.__dockyardPopupIntervalMs) : POPUP_INTERVAL_MS;
   window.__dockyardPopupPoller = setInterval(tick, interval);
   window.setTimeout(tick, 1500);
+}
+function stopPopupPoller() {
+  if (!window.__dockyardPopupPoller) return;
+  clearInterval(window.__dockyardPopupPoller);
+  window.__dockyardPopupPoller = void 0;
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", stopPopupPoller);
+  window.addEventListener("pageshow", () => startPopupPoller());
 }
 var __plugin = {
   id: "hermes-project-stewardship",
@@ -26938,7 +26966,7 @@ var __plugin = {
           id: "hermes-project-stewardship.open",
           label: "Project Stewardship: Open fleet overview",
           keywords: ["dockyard", "fleet", "projects", "approvals", "notifications"],
-          run: () => host2.navigate("/dockyard")
+          run: () => host3.navigate("/dockyard")
         }
       }
     ]);
