@@ -37,7 +37,7 @@ import { ConsoleBar } from '../lib/ui.js'
 import { ToastRegion } from '../lib/ui.js'
 import { useDialogFocusManager } from '../lib/ui.js'
 import { Button } from '../lib/ui.js'
-import { OnboardingWizard } from '../lib/ui.js'
+import { FleetOnboarding } from '../fleet/ui.js'
 import { ALL_PROJECTS } from '../lib/project-switcher.js'
 import { ProjectChooser } from '../lib/project-switcher.js'
 import { ScopeNote } from '../lib/project-switcher.js'
@@ -573,6 +573,7 @@ export function DashboardPage({ inboxCss = '' } = {}) {
       ]}),
     ]}) : null,
     archivedOpen ? jsx(ArchivedProjectsDialog, { onClose: () => setArchivedOpen(false), onRestored: projectRestored, onCount: setArchivedCount }) : null,
-    onboarding ? jsx(OnboardingWizard, { intent: onboarding, onClose: () => setOnboarding(null), onComplete: completeOnboarding }) : null,
+    // Fleet: bind-only onboarding when the fleet backend answers (fleet/ui.js).
+    onboarding ? jsx(FleetOnboarding, { intent: onboarding, onClose: () => setOnboarding(null), onComplete: completeOnboarding }) : null,
   ]})
 }

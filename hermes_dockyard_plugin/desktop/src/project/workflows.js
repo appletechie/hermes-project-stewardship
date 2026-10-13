@@ -30,6 +30,7 @@ import { RepeatPopover } from './workflow-design/shared.js'
 import { readStepSettings } from './workflow-design/standins.js'
 import { writeStepSettings } from './workflow-design/standins.js'
 import { EMPTY_STEP } from './workflow-design/standins.js'
+import { emitToast } from '../runtime/context.js'
 const NO_RUNS = []
 const NO_THREAD = []
 const failureText = (failure) => String(failure?.message ?? failure ?? 'unknown error').replace(/^\d{3}:\s*/, '')
@@ -291,6 +292,11 @@ export function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpen
       // review can never approve something else. Retry re-queues via the
       // canonical work-item transition — never an optimistic local flip.
       onApprove: async (ref) => {
+        // Fleet (GET /health says fleet): approving names an owner, which the Approval Inbox asks for (fleet/ui.js).
+        if ((await api('/health').catch(() => null))?.fleet === true) {
+          emitToast('danger', 'Approve this initiative from the Approval Inbox: this fleet names an owner on approval.')
+          throw new Error('approval needs an owner')
+        }
         const decision = await api(`/initiatives/${encodeURIComponent(ref)}/decision`)
         await api(`/initiatives/${encodeURIComponent(ref)}/approve`, { method: 'POST', body: { expected_fingerprint: decision.fingerprint } })
         await actionsRef.current.loadRuns(workflowName)

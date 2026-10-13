@@ -5,6 +5,7 @@ import { api, emitToast } from '../runtime/context.js'
 import { jsx, jsxs } from '../runtime/react.js'
 import { Button, StatusTag, formatWhen, riskDetails, useDialogFocusManager } from '../lib/ui.js'
 import { mergeActivity } from '../inbox/model.js'
+import { FleetApproval, dispatchOwner, useFleetDecision } from '../fleet/ui.js'
 
 const decisionText = (value) => {
   if (value == null || value === '') return 'Not supplied'
@@ -64,6 +65,8 @@ export function ApprovalDetail({ item, onResolved, onBack }) {
   const [rejectReason, setRejectReason] = useState('')
   const [changesOpen, setChangesOpen] = useState(false)
   const [feedback, setFeedback] = useState('')
+  // Fleet: approval names an owner and dispatches the Implement card (fleet/ui.js).
+  const fleet = useFleetDecision(item.ref)
 
   useEffect(() => {
     let current = true
@@ -105,7 +108,7 @@ export function ApprovalDetail({ item, onResolved, onBack }) {
     onResolved(item.ref)
   }
 
-  const decide = async (action) => {
+  const decide = async (action, owner = null) => {
     if (!decision) return
     setState(action === 'approve' ? 'approving' : 'rejecting')
     setError(null)
@@ -114,10 +117,17 @@ export function ApprovalDetail({ item, onResolved, onBack }) {
       const body = action === 'reject'
         ? { expected_fingerprint: decision.fingerprint, reason: rejectReason.trim() }
         : { expected_fingerprint: decision.fingerprint }
+      // Fleet: upstream's approve checks the owner first and binds its Implement card to it.
+      if (owner) body.assignee = owner
       await api(`/initiatives/${encodeURIComponent(item.ref)}/${action}`, {
         method: 'POST', body, suppressErrorToast: true,
       })
       await confirmReceipt(expected)
+      if (owner) {
+        await dispatchOwner({ ref: item.ref, projectId: decision.project_id ?? item.project, owner, approved: true })
+        onResolved(item.ref)
+        return
+      }
       finish(action === 'approve' ? 'Approved; confirmed by decision receipt' : 'Rejected; confirmed by decision receipt')
     } catch (failure) {
       setState('failed')
@@ -229,8 +239,9 @@ export function ApprovalDetail({ item, onResolved, onBack }) {
         ]}),
       ]}) : null,
       error ? jsx('p', { className: 'dockyard-inline-error', role: 'alert', children: error }) : null,
+      jsx(FleetApproval, { item, decision, fleet, busy, onApprove: (owner) => decide('approve', owner) }),
       jsxs('footer', { className: 'dockyard-inbox-actions', children: [
-        jsx(Button, { action: 'approve', variant: 'primary', disabled: busy || !decision, onClick: () => decide('approve'), children: state === 'approving' ? 'Approving...' : 'Approve' }),
+        jsx(Button, { action: 'approve', variant: 'primary', disabled: busy || !decision || fleet.blocked, onClick: () => fleet.mode === 'fleet' ? fleet.setOwnerOpen(true) : decide('approve'), children: state === 'approving' ? 'Approving...' : 'Approve' }),
         jsx(Button, { action: 'reject', variant: 'danger', disabled: busy || !decision, onClick: () => setRejectOpen(true), children: 'Reject' }),
         jsx(Button, { action: 'request-changes', variant: 'quiet', disabled: busy || !decision, onClick: () => setChangesOpen((open) => !open), children: 'Request changes' }),
         jsx('span', { className: 'spacer' }),
