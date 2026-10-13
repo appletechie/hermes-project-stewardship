@@ -47,12 +47,15 @@ async function rest(path, init = {}) {
 // midground, the text and primary colour) drive the neutral, text and action
 // tokens, mixed the way the dashboard mixes its own cards and borders. Status
 // colours stay the app's contrast-checked light/dark ones. The other themes
-// and the font picker are an explicit choice and stay as designed. Also drops
+// and the font picker are an explicit choice and stay as designed. The tab's
+// wrapper takes the content column's width and never its content's, so
+// nothing in the app can widen the dashboard page. Also drops
 // the Desktop window's full-viewport minimum height inside the scrolling tab,
 // and gives headings back the bold weight the dashboard's CSS reset
 // (Tailwind preflight) takes away and the app's own rules assume.
 const mix = (pct) => `color-mix(in srgb, var(--midground-base) ${pct}%, var(--background-base))`
 const HOST_CSS = `
+.hps-fleet-web { width: 100%; max-width: 100%; min-width: 0; contain: inline-size; overflow-x: clip; }
 .hps-fleet-web .dockyard-root { min-height: 100%; }
 .hps-fleet-web :where(h1, h2, h3, h4, h5, h6) { font-weight: bold; }
 .hps-fleet-web .dockyard-root:not([data-dy-font]) { font-family: var(--theme-font-sans); }
