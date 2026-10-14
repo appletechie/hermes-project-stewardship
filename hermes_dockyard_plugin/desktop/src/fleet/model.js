@@ -166,6 +166,7 @@ export function controlCenterView(payload, projectId, now = Date.now()) {
     .map((item) => ({
       principal_id: item.principal_id, label: capabilityLabel(item), system: text(item.system), profile: text(item.profile),
       role: text(item.role), coordinator: text(item.coordinator), projects: strings(item.projects),
+      context: text(item.context), scope: 'display_only',
       state: ['configured', 'untested', 'blocked', 'disabled'].includes(item.state) ? item.state : 'untested',
       freshness: capabilityFreshness(item, { ...registry, state }, now),
       observed_at: text(item.observed_at), expires_at: text(item.expires_at), source: text(item.source),

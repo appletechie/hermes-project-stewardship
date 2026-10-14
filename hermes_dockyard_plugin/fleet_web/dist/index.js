@@ -7714,6 +7714,8 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
       role: text(item.role),
       coordinator: text(item.coordinator),
       projects: strings(item.projects),
+      context: text(item.context),
+      scope: "display_only",
       state: ["configured", "untested", "blocked", "disabled"].includes(item.state) ? item.state : "untested",
       freshness: capabilityFreshness(item, { ...registry, state }, now),
       observed_at: text(item.observed_at),
@@ -7856,6 +7858,7 @@ ${FONTS.filter((font) => font.id !== DEFAULT_FONT).map((font) => `.dockyard-root
         facts([
           ["Scope", item.projects.join(", ")],
           ["Product / profile", [item.system, item.profile].filter(Boolean).join(" / ")],
+          ["Configuration context", item.context === "main" ? "Main gateway; private operator settings are separate" : item.context || "Not recorded"],
           ["Coordinator", item.coordinator],
           ["Observed", when(item.observed_at)],
           ["Expires", when(item.expires_at)],

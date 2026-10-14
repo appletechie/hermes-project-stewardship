@@ -100,6 +100,7 @@ function ControlPrincipal({ item }) {
       jsx('summary', { children: 'Scope, capability and evidence' }),
       facts([
         ['Scope', item.projects.join(', ')], ['Product / profile', [item.system, item.profile].filter(Boolean).join(' / ')],
+        ['Configuration context', item.context === 'main' ? 'Main gateway; private operator settings are separate' : item.context || 'Not recorded'],
         ['Coordinator', item.coordinator], ['Observed', when(item.observed_at)], ['Expires', when(item.expires_at)], ['Source', item.source],
         ['Configured tools by surface', surfaceText(item.tools.configured_by_surface)], ['Legacy tool configuration', item.tools.configured_legacy.join(', ') || 'None recorded'],
         ['Disabled tools', item.tools.disabled.join(', ') || 'None recorded'], ['Known plugins by surface', surfaceText(item.tools.known_plugins_by_surface)], ['Effective tools', 'Unverified'],

@@ -31,6 +31,8 @@ test('capability configuration never becomes tested and observation expiry stays
   data.capabilities.items[0].mcp[1].effective = 'tested'
   const view = controlCenterView(data, 'payments-relaunch', NOW)
   const [hermes, chatgpt, grok] = view.capabilities.items
+  assert.equal(hermes.context, 'main')
+  assert.equal(hermes.scope, 'display_only')
   assert.equal(hermes.state, 'configured')
   assert.equal(chatgpt.state, 'blocked')
   assert.equal(chatgpt.freshness, 'current')

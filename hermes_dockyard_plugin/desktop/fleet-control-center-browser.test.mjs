@@ -104,6 +104,7 @@ test('Desktop and web control center: scope, text, links, failures, controls and
       const principal = panel.locator('[data-control-principal="hermes:techie"]')
       await principal.locator('summary').click()
       assert.match(await principal.innerText(), /Effective tools\s+Unverified/)
+      assert.match(await principal.innerText(), /Configuration context\s+Main gateway; private operator settings are separate/)
       assert.match(await principal.innerText(), /cli: read_file, terminal/)
       assert.match(await principal.innerText(), /Legacy tool configuration\s+legacy-shell/)
       assert.match(await principal.innerText(), /Disabled tools\s+unsafe_tool/)
