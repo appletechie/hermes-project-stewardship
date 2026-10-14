@@ -8,9 +8,9 @@
 //   - bind-only onboarding: the fleet binds existing boards, never creates one.
 // Each piece renders upstream's behaviour unchanged against a vanilla backend.
 import { Fragment, jsx, jsxs, useEffect, useState } from '../runtime/react.js'
-import { api, emitToast } from '../runtime/context.js'
+import { api, emitToast, useStylesheet } from '../runtime/context.js'
 import { Button, OnboardingWizard, StatusTag, formatWhen, useDialogFocusManager } from '../lib/ui.js'
-import { SLUG, WAIT_FIELDS, boardsFor, dispatchMessage, needFor, onboardBody, onboardValid, waitBody, waitStatus, waitText, waitTone, waitValid } from './model.js'
+import { SLUG, WAIT_FIELDS, boardsFor, controlCenterView, controlProjects, dispatchMessage, needFor, onboardBody, onboardValid, refreshControlCenter, safeEvidenceUrl, waitBody, waitStatus, waitText, waitTone, waitValid } from './model.js'
 
 const enc = encodeURIComponent
 const message = (failure) => String(failure?.message ?? failure)
@@ -31,6 +31,192 @@ export async function fleetRead(main, extra) {
   if (health?.fleet !== true) return { mode: 'vanilla' }
   const [first, second] = await Promise.all([read(main), read(extra)])
   return first.error ? { mode: 'unavailable', error: first.error } : { mode: 'fleet', data: first.data, extra: second.data, extraError: second.error }
+}
+
+const CONTROL_CSS = `
+.dockyard-root .dy-control { min-width:0; margin:0 0 20px; padding:18px; border:1px solid var(--dy-border); border-radius:14px; background:var(--dy-surface); color:var(--dy-text); overflow-wrap:anywhere; }
+.dockyard-root .dy-control h2 { margin:0; font-size:18px; }
+.dockyard-root .dy-control h3 { margin:16px 0 8px; font-size:14px; }
+.dockyard-root .dy-control p { margin:6px 0; }
+.dockyard-root .dy-control-head, .dockyard-root .dy-control-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; min-width:0; }
+.dockyard-root .dy-control-head > *, .dockyard-root .dy-control-actions > * { min-width:0; }
+.dockyard-root .dy-control-project { border-top:1px solid var(--dy-border); margin-top:14px; padding-top:12px; min-width:0; }
+.dockyard-root .dy-control summary { cursor:pointer; overflow-wrap:anywhere; }
+.dockyard-root .dy-control-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; min-width:0; }
+.dockyard-root .dy-control-item { min-width:0; padding:12px; border:1px solid var(--dy-border); border-radius:9px; background:var(--dy-surface-subtle); }
+.dockyard-root .dy-control-item .dockyard-status-tag { white-space:normal; }
+.dockyard-root .dy-control-item summary { font-weight:600; }
+.dockyard-root .dy-control-facts { display:grid; grid-template-columns:minmax(70px,auto) minmax(0,1fr); gap:5px 12px; font-size:12px; margin:10px 0; }
+.dockyard-root .dy-control-facts dt { color:var(--dy-text-2); }
+.dockyard-root .dy-control-facts dd { margin:0; min-width:0; }
+.dockyard-root .dy-control a { color:var(--dy-accent-text); }
+.dockyard-root .dy-control ul { margin:8px 0; padding-left:18px; }
+.dockyard-root .dy-control-blocker { border-left:3px solid var(--dy-warning); padding-left:9px; font-size:12px; }
+.dockyard-root .dy-control-more { margin-top:10px; }
+`
+
+const STATE_LABELS = { configured: 'Configured · untested', untested: 'Untested', blocked: 'Blocked', disabled: 'Disabled' }
+const stateTone = (state) => state === 'blocked' || state === 'unavailable' ? 'danger' : state === 'stale' || state === 'partial' ? 'warning' : 'neutral'
+const when = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString().replace('T', ' ').replace('.000Z', ' UTC') : 'Not recorded'
+const readable = (value) => String(value || 'unknown').replaceAll('_', ' ')
+const surfaceText = (entries) => entries.map((entry) => `${entry.surface}: ${entry.names.join(', ') || 'None recorded'}`).join('; ') || 'None recorded'
+const mcpText = (entry) => {
+  const enabled = entry.enabled === true ? 'configured enabled' : entry.enabled === false ? 'disabled' : 'enablement unknown'
+  const selection = entry.selection === 'unrestricted' ? 'no include restriction configured'
+    : entry.selection === 'include' ? `included tools: ${entry.tools.join(', ') || 'none recorded'}`
+      : `selection not recorded${entry.tools.length ? `; listed tools: ${entry.tools.join(', ')}` : ''}`
+  return `${entry.name} (${enabled}; ${selection}${entry.excluded_tools.length ? `; excluded tools: ${entry.excluded_tools.join(', ')}` : ''}; effective unverified)`
+}
+const facts = (entries) => jsx('dl', { className: 'dy-control-facts', children: entries.flatMap(([label, value]) => [
+  jsx('dt', { children: label }, `${label}-label`), jsx('dd', { children: value || 'Not recorded' }, label),
+]) })
+
+function ControlEvidence({ evidence }) {
+  if (!evidence.length) return jsx('p', { className: 'dockyard-meta', children: 'Evidence: not recorded' })
+  return jsx('ul', { 'aria-label': 'Evidence references', children: evidence.map((item, index) => {
+    const href = safeEvidenceUrl(item.reference)
+    return jsxs('li', { children: [
+      item.kind ? `${readable(item.kind)} · ` : null,
+      href ? jsx('a', { href, target: '_blank', rel: 'noopener noreferrer', children: item.reference }) : item.reference,
+      jsx('span', { className: 'dockyard-meta', children: ` · ${when(item.observed_at)}` }),
+    ] }, index)
+  }) })
+}
+
+function ControlPrincipal({ item }) {
+  const blocker = item.blocker
+  return jsxs('article', { className: 'dy-control-item', 'data-control-principal': item.principal_id, children: [
+    jsxs('div', { className: 'dy-control-head', children: [
+      jsx('strong', { children: item.label }),
+      jsx(StatusTag, { tone: stateTone(item.state), label: STATE_LABELS[item.state] }),
+    ] }),
+    jsx('p', { className: 'dockyard-meta', children: `${item.principal_id} · ${item.role || 'Role not recorded'}` }),
+    jsx('p', { className: 'dockyard-meta', children: `Owner: ${blocker.owner || item.coordinator || 'Not recorded'} · Observation ${item.freshness}` }),
+    blocker.reason || blocker.next_action || item.state === 'blocked' ? jsxs('div', { className: 'dy-control-blocker', children: [
+      jsx('p', { children: blocker.reason || 'Connection blocked; reason not recorded.' }),
+      jsx('p', { children: `Next action: ${blocker.next_action || 'Owner to record the next action.'}` }),
+    ] }) : null,
+    jsxs('details', { children: [
+      jsx('summary', { children: 'Scope, capability and evidence' }),
+      facts([
+        ['Scope', item.projects.join(', ')], ['Product / profile', [item.system, item.profile].filter(Boolean).join(' / ')],
+        ['Configuration context', item.context === 'main' ? 'Main gateway; private operator settings are separate' : item.context || 'Not recorded'],
+        ['Coordinator', item.coordinator], ['Observed', when(item.observed_at)], ['Expires', when(item.expires_at)], ['Source', item.source],
+        ['Configured tools by surface', surfaceText(item.tools.configured_by_surface)], ['Legacy tool configuration', item.tools.configured_legacy.join(', ') || 'None recorded'],
+        ['Disabled tools', item.tools.disabled.join(', ') || 'None recorded'], ['Known plugins by surface', surfaceText(item.tools.known_plugins_by_surface)], ['Effective tools', 'Unverified'],
+        ['Plugins', item.plugins.join(', ') || 'None recorded'], ['Disabled plugins', item.disabled_plugins.join(', ') || 'None recorded'],
+        ['MCP', item.mcp.map(mcpText).join('; ') || 'None recorded'],
+        ['Skills', `Local: ${item.skills.local_count ?? 'unknown'} · External: ${item.skills.external_count ?? 'unknown'}`],
+        ['Model', [item.model.provider, item.model.default].filter(Boolean).join(' / ')],
+        ['Fallback models', item.model.fallback_providers.join(', ') || 'None recorded'], ['Effective model', 'Unverified'],
+      ]),
+      jsx(ControlEvidence, { evidence: item.evidence }),
+    ] }),
+  ] })
+}
+
+function ControlWork({ item, projectId, onOpen }) {
+  return jsxs('article', { className: 'dy-control-item', 'data-control-work': item.work_id, children: [
+    jsxs('div', { className: 'dy-control-head', children: [
+      jsx('strong', { children: item.title }),
+      jsx(StatusTag, { tone: item.needs_dispatch ? 'warning' : 'neutral', label: item.needs_dispatch ? 'Needs owner' : readable(item.status) }),
+    ] }),
+    jsx('p', { className: 'dockyard-meta', children: `${item.initiative_ref} · Owner: ${item.native.owner || 'Unassigned'}` }),
+    jsx('p', { className: 'dockyard-meta', children: item.card_error ? 'Native binding unavailable' : item.native.card_id
+      ? `Hermes: ${item.native.card_id} on ${item.native.board || 'unknown board'} · ${readable(item.native.status)}` : 'Native card: not linked' }),
+    jsxs('details', { children: [
+      jsx('summary', { children: 'Work links and result evidence' }),
+      facts([['Work ID', item.work_id], ['Jira', 'Not linked'], ['Paseo', 'Not linked']]),
+      jsx(ControlEvidence, { evidence: item.evidence }),
+      jsx('p', { className: 'dockyard-meta', children: 'Delivery confirmation stays in the existing human approval controls.' }),
+    ] }),
+    item.native.card_id ? jsx(Button, { small: true, onClick: () => onOpen?.(`s2:work/${item.native.card_id}`, { projectId }), children: 'Open native work' }) : null,
+  ] })
+}
+
+function ControlRows({ items, render, noun }) {
+  return jsxs(Fragment, { children: [
+    jsx('div', { className: 'dy-control-grid', children: items.slice(0, 6).map(render) }),
+    items.length > 6 ? jsxs('details', { className: 'dy-control-more', children: [
+      jsx('summary', { children: `${items.length - 6} more ${noun}` }),
+      jsx('div', { className: 'dy-control-grid', children: items.slice(6).map(render) }),
+    ] }) : null,
+  ] })
+}
+
+export function ControlCenterProject({ view, onOpen, onSettings, onApprovals }) {
+  const registry = view.capabilities
+  const blocked = registry?.items.filter((item) => item.state === 'blocked').length ?? 0
+  const stale = registry?.items.filter((item) => item.freshness === 'stale').length ?? 0
+  const teamSummary = registry?.state === 'unavailable' ? 'Team evidence unavailable' : `${registry?.items.length ?? 0} team entries (${blocked} blocked, ${stale} stale)`
+  const workSummary = view.sources?.dispatch === 'unavailable' ? 'Native work unavailable' : `${view.work?.length ?? 0} active work`
+  return jsxs('details', { className: 'dy-control-project', 'data-control-project': view.project_id, children: [
+    jsx('summary', { children: view.mode === 'fleet'
+      ? `${view.project_id} · ${teamSummary} · ${workSummary} · Registry ${registry.state} · Native work ${view.sources.dispatch}${view.sources.needs_you !== 'current' ? ` · Needs you ${view.sources.needs_you}` : ''}`
+      : `${view.project_id} · Control center unavailable` }),
+    jsxs('div', { className: 'dy-control-head', children: [
+      jsx('strong', { children: view.project_id }),
+      jsxs('div', { className: 'dy-control-actions', children: [
+        jsx(Button, { small: true, onClick: () => onOpen?.(`s1:project/${view.project_id}`), children: 'Project overview' }),
+        jsx(Button, { small: true, onClick: () => onSettings?.(view.project_id), children: 'Project settings' }),
+        jsx(Button, { small: true, onClick: () => onApprovals?.(view.project_id), children: 'Approvals' }),
+      ] }),
+    ] }),
+    view.mode !== 'fleet' ? jsx('p', { className: 'dockyard-inline-error', role: 'status', children: `Control center unavailable: ${view.error}` }) : jsxs(Fragment, { children: [
+      jsx('p', { className: 'dockyard-meta', children: `Observed ${when(view.observed_at)} · Native work ${view.sources.dispatch} · Needs you ${view.sources.needs_you}${view.sources.needs_you === 'current' ? ` (${view.needs_you.length})` : ''}` }),
+      jsx('h3', { children: 'Team and connections' }),
+      jsx('p', { className: 'dockyard-meta', children: `Capability registry ${registry.state}${registry.reason ? ` · ${readable(registry.reason)}` : ''} · Observed ${when(registry.observed_at)}` }),
+      registry.items.length ? jsx(ControlRows, { items: registry.items, noun: 'team members', render: (item) => jsx(ControlPrincipal, { item }, item.principal_id) })
+        : jsx('p', { role: 'status', children: registry.state === 'unavailable' ? 'Capability evidence is unavailable. Connection readiness is unknown.' : 'No capability observations recorded for this project.' }),
+      jsx('h3', { children: 'Active work' }),
+      view.sources.dispatch !== 'current' ? jsx('p', { className: 'dockyard-inline-error', role: 'status', children: `Native work source ${view.sources.dispatch}; this list may be incomplete.` }) : null,
+      view.work.length ? jsx(ControlRows, { items: view.work, noun: 'work items', render: (item) => jsx(ControlWork, { item, projectId: view.project_id, onOpen }, item.work_id) })
+        : jsx('p', { className: 'dockyard-meta', children: view.sources.dispatch === 'current' ? 'No active initiatives reported.' : 'Active work cannot be confirmed.' }),
+      view.truncated.length ? jsx('p', { className: 'dockyard-meta', children: `Limited snapshot: ${view.truncated.map(readable).join(', ')}. Open the project for the full view.` }) : null,
+    ] }),
+  ] })
+}
+
+export function FleetControlCenter({ projects, selectedProject, refreshedAt, onOpen, onSettings, onApprovals }) {
+  useStylesheet('dy-control-stylesheet', 'dyControlStylesheet', CONTROL_CSS)
+  const scope = controlProjects(projects, selectedProject).join(',')
+  const [state, setState] = useState({ mode: 'loading', scope: '' })
+  const [revision, setRevision] = useState(0)
+  useEffect(() => {
+    let current = true
+    setState({ mode: 'loading', scope })
+    if (!scope) return () => { current = false }
+    fleetRead().then(async (result) => {
+      if (!current) return
+      if (result.mode !== 'fleet') { setState({ ...result, scope }); return }
+      const views = await Promise.all(scope.split(',').map(async (projectId) => {
+        const response = await read(`/control-center?project_id=${enc(projectId)}`)
+        return response.error ? { mode: 'unavailable', project_id: projectId, error: response.error } : controlCenterView(response.data, projectId)
+      }))
+      if (current) setState({ mode: 'fleet', scope, views })
+    })
+    return () => { current = false }
+  }, [scope, refreshedAt, revision])
+  useEffect(() => {
+    const now = Date.now()
+    const expiries = (state.views ?? []).filter((view) => view.mode === 'fleet').flatMap((view) => [
+      view.capabilities.expires_at, ...view.capabilities.items.map((item) => item.expires_at),
+    ]).map(Date.parse).filter((expires) => Number.isFinite(expires) && expires > now)
+    if (!expiries.length) return undefined
+    const timer = window.setTimeout(() => setState((current) => current.mode === 'fleet'
+      ? { ...current, views: current.views.map((view) => refreshControlCenter(view)) } : current), Math.min(Math.min(...expiries) - now + 1, 2147483647))
+    return () => window.clearTimeout(timer)
+  }, [state.views])
+  if (!scope || state.mode === 'vanilla') return null
+  const loading = state.scope !== scope || state.mode === 'loading'
+  return jsxs('section', { className: 'dy-control', 'data-fleet-control-center': true, 'aria-label': 'Project control center', 'aria-busy': loading, children: [
+    jsxs('div', { className: 'dy-control-head', children: [
+      jsx('h2', { children: 'Connected team and work' }),
+      jsx(Button, { small: true, disabled: loading, action: 'refresh-control-center', onClick: () => setRevision((value) => value + 1), children: 'Refresh connections' }),
+    ] }),
+    jsx('p', { className: 'dockyard-meta', children: 'Project owners, connection evidence and active work. Configured capabilities still require a successful test.' }),
+    loading ? jsx('p', { role: 'status', children: 'Reading project connections…' }) : state.views?.map((view) => jsx(ControlCenterProject, { view, onOpen, onSettings, onApprovals }, view.project_id)),
+  ] })
 }
 
 function useEscape(busy, onCancel) {

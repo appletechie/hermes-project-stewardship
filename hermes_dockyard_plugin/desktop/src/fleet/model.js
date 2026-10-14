@@ -114,3 +114,99 @@ export function onboardBody(form) {
     autonomy_level: Number(form.autonomy_level),
   }
 }
+
+const text = (value) => typeof value === 'string' ? value : ''
+const list = (value) => Array.isArray(value) ? value : []
+const strings = (value) => list(value).filter((item) => typeof item === 'string')
+const surfaces = (value) => Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+  .slice(0, 32).map(([surface, values]) => ({ surface, names: strings(values) }))
+const sourceState = (value) => ['current', 'partial', 'unavailable'].includes(value) ? value : 'unavailable'
+
+export function controlProjects(projects, selectedProject) {
+  return [...new Set(list(projects).map((project) => project.id).filter((id) => typeof id === 'string' && SLUG.test(id)
+    && (selectedProject === '*' || id === selectedProject)))]
+}
+
+export function capabilityLabel(item) {
+  const names = { 'hermes:techie': 'Hermes Techie', 'chatgpt-dot:techie': 'ChatGPT Techie', 'grokbot:projectsmanager': 'Grok ProjectsManager', 'paseo:integration': 'Paseo' }
+  if (Object.hasOwn(names, item.principal_id)) return names[item.principal_id]
+  const name = text(item.display_name) || text(item.profile) || text(item.principal_id)
+  return item.principal_id?.startsWith('paseo:') ? `Paseo · ${name}` : name
+}
+
+export function capabilityFreshness(item, registry, now = Date.now()) {
+  const observed = Date.parse(item.observed_at)
+  const expires = Date.parse(item.expires_at)
+  if (registry.state === 'unavailable' || !Number.isFinite(observed) || !Number.isFinite(expires) || observed > now + 60000 || expires < observed) return 'unknown'
+  return registry.state === 'stale' || item.freshness === 'stale' || expires <= now || Date.parse(registry.expires_at) <= now ? 'stale' : 'current'
+}
+
+export function safeEvidenceUrl(value) {
+  if (typeof value !== 'string' || value !== value.trim()) return null
+  try {
+    const url = new URL(value)
+    const allowed = ['github.com', 'gitlab.com', 'bitbucket.org', 'chatgpt.com', 'grok.com'].includes(url.hostname)
+      || /^[a-z0-9-]+\.atlassian\.net$/.test(url.hostname)
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port && allowed ? url.href : null
+  } catch { return null }
+}
+
+const evidenceFor = (value) => list(value).filter((item) => item && typeof item === 'object').slice(0, 20).map((item) => ({
+  kind: text(item.kind), reference: text(item.reference), observed_at: text(item.observed_at),
+})).filter((item) => item.reference)
+
+export function controlCenterView(payload, projectId, now = Date.now()) {
+  if (typeof projectId !== 'string' || !SLUG.test(projectId) || payload?.schema_version !== 1 || payload?.project_id !== projectId) {
+    return { mode: 'unavailable', project_id: projectId, error: 'Control-center response does not match this project or supported schema.' }
+  }
+  const registry = payload.capabilities ?? {}
+  const state = ['current', 'stale', 'unavailable'].includes(registry.state) ? registry.state : 'unavailable'
+  const capabilities = state === 'unavailable' ? [] : list(registry.items)
+    .filter((item) => item && typeof item.principal_id === 'string' && strings(item.projects).includes(projectId)).slice(0, 256)
+    .map((item) => ({
+      principal_id: item.principal_id, label: capabilityLabel(item), system: text(item.system), profile: text(item.profile),
+      role: text(item.role), coordinator: text(item.coordinator), projects: strings(item.projects),
+      context: text(item.context), scope: 'display_only',
+      state: ['configured', 'untested', 'blocked', 'disabled'].includes(item.state) ? item.state : 'untested',
+      freshness: capabilityFreshness(item, { ...registry, state }, now),
+      observed_at: text(item.observed_at), expires_at: text(item.expires_at), source: text(item.source),
+      tools: { configured_by_surface: surfaces(item.tools?.configured_by_surface), configured_legacy: strings(item.tools?.configured_legacy),
+        disabled: strings(item.tools?.disabled), known_plugins_by_surface: surfaces(item.tools?.known_plugins_by_surface), effective: 'unverified' },
+      plugins: strings(item.plugins), disabled_plugins: strings(item.disabled_plugins),
+      mcp: list(item.mcp).filter((entry) => entry && typeof entry.name === 'string').map((entry) => ({ name: entry.name, enabled: entry.enabled,
+        tools: strings(entry.tools), excluded_tools: strings(entry.excluded_tools),
+        selection: ['include', 'unrestricted'].includes(entry.selection) ? entry.selection : null, effective: 'unverified' })),
+      skills: { local_count: Number.isInteger(item.skills?.local_count) ? item.skills.local_count : null,
+        external_count: Number.isInteger(item.skills?.external_count) ? item.skills.external_count : null },
+      model: { provider: text(item.model?.provider), default: text(item.model?.default),
+        fallback_providers: list(item.model?.fallback_providers).filter(Boolean).map((entry) => [text(entry.provider), text(entry.model)].filter(Boolean).join(' / ')).filter(Boolean) },
+      blocker: { owner: text(item.blocker?.owner), reason: text(item.blocker?.reason), next_action: text(item.blocker?.next_action) },
+      evidence: evidenceFor(item.evidence),
+    }))
+  const work = list(payload.work).filter((item) => item && typeof item.initiative_ref === 'string'
+    && item.work_id === `initiative:${projectId}:${item.initiative_ref}`
+    && (!item.project_id || item.project_id === projectId)).slice(0, 500).map((item) => ({
+      work_id: item.work_id, initiative_ref: item.initiative_ref, title: text(item.title) || item.initiative_ref,
+      status: text(item.status), needs_dispatch: item.needs_dispatch === true,
+      native: { board: text(item.native?.board), card_id: item.card_error ? '' : text(item.native?.card_id), owner: text(item.native?.owner), status: text(item.native?.status) },
+      card_error: item.card_error === 'binding_unavailable', evidence: evidenceFor(item.evidence),
+      jira: null, paseo: [],
+    }))
+  return refreshControlCenter({
+    mode: 'fleet', project_id: projectId, observed_at: text(payload.observed_at),
+    capabilities: { state, reason: text(registry.reason), observed_at: text(registry.observed_at), expires_at: text(registry.expires_at), items: capabilities },
+    work, needs_you: list(payload.needs_you).filter((item) => item?.project_id === projectId).slice(0, 500),
+    sources: { dispatch: sourceState(payload.sources?.dispatch), needs_you: sourceState(payload.sources?.needs_you) },
+    truncated: ['capabilities', 'work', 'needs_you'].filter((key) => payload.truncated?.[key] === true),
+  }, now)
+}
+
+export function refreshControlCenter(view, now = Date.now()) {
+  if (view.mode !== 'fleet') return view
+  const registry = view.capabilities
+  const expired = registry.state === 'current' && Date.parse(registry.expires_at) <= now
+  const capabilities = expired ? { ...registry, state: 'stale', reason: 'registry_expired' } : registry
+  return { ...view, capabilities: { ...capabilities, items: capabilities.items.map((item) => ({
+    ...item, freshness: capabilityFreshness(item, capabilities, now),
+  })) } }
+}
