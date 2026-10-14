@@ -37,7 +37,7 @@ import { ConsoleBar } from '../lib/ui.js'
 import { ToastRegion } from '../lib/ui.js'
 import { useDialogFocusManager } from '../lib/ui.js'
 import { Button } from '../lib/ui.js'
-import { FleetOnboarding } from '../fleet/ui.js'
+import { FleetControlCenter, FleetOnboarding } from '../fleet/ui.js'
 import { ALL_PROJECTS } from '../lib/project-switcher.js'
 import { ProjectChooser } from '../lib/project-switcher.js'
 import { ScopeNote } from '../lib/project-switcher.js'
@@ -370,7 +370,7 @@ export function DashboardPage({ inboxCss = '' } = {}) {
   // s6:initiative/<ref> / s4 open the approval inbox focused on the ref.
   const [deepLinkNotice, setDeepLinkNotice] = useState(null)
   const [inboxFocusRef, setInboxFocusRef] = useState(null)
-  const openDeepLink = (link) => {
+  const openDeepLink = (link, context) => {
     if (typeof link !== 'string' || !link.includes(':')) return
     const [screen, rest] = link.split(':', 2)
     const slash = rest.indexOf('/')
@@ -387,8 +387,9 @@ export function DashboardPage({ inboxCss = '' } = {}) {
       const known = Object.entries(data?.payload?.projectContext ?? {})
       const ownerProject = known.find(([, context]) =>
         (context.workItems ?? []).some((item) => item.ref === objectId))
-      setDeepLinkNotice(ownerProject ? null : `Work item ${objectId} is not in the current board data.`)
-      setSelectedProject(ownerProject ? ownerProject[0] : (selectedProject ?? data?.payload?.projects?.[0]?.id ?? null))
+      const targetProject = projectOptions.some((project) => project.id === context?.projectId) ? context.projectId : ownerProject?.[0]
+      setDeepLinkNotice(targetProject ? null : `Work item ${objectId} is not in the current board data.`)
+      setSelectedProject(targetProject ?? selectedProject ?? data?.payload?.projects?.[0]?.id ?? null)
       setProjectEntryView('overview')
       setTab('project')
       setPendingWorkRef(objectId)
@@ -454,6 +455,9 @@ export function DashboardPage({ inboxCss = '' } = {}) {
   } else if (tab === 'dashboard') {
     content = jsxs(Fragment, { children: [
       scopeNote(scoped?.hidden ?? 0, 'items that need you'),
+      jsx(FleetControlCenter, { projects: projectOptions, selectedProject, refreshedAt: data.refreshedAt, onOpen: openDeepLink,
+        onSettings: (project) => requestTab('project', { project, entryView: 'settings' }),
+        onApprovals: (project) => requestTab('inbox', { project }) }),
       jsx(DashboardView, { view: scoped?.view ?? payload, onInbox: () => setTab('inbox'), onRefresh: refresh, onOpen: openDeepLink, resetView: dashboardHomeVersion }, 'dashboard'),
     ] })
   } else if (tab === 'project') {

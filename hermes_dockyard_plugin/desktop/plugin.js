@@ -6287,7 +6287,7 @@ function useSwitcherList(projects, scope) {
     setActive(0);
   }, active, setActive, entries, openAt, onKeyDown };
 }
-function SwitcherSearch({ idPrefix, list, onPick, onClose }) {
+function SwitcherSearch({ idPrefix, list: list2, onPick, onClose }) {
   return jsxs("label", { className: "dy-sw-search", children: [
     jsx(Icon, { name: "search" }),
     jsx("input", {
@@ -6297,21 +6297,21 @@ function SwitcherSearch({ idPrefix, list, onPick, onClose }) {
       "aria-expanded": true,
       "aria-controls": `${idPrefix}-options`,
       "aria-autocomplete": "list",
-      "aria-activedescendant": list.entries[list.active] ? `${idPrefix}-option-${list.active}` : void 0,
+      "aria-activedescendant": list2.entries[list2.active] ? `${idPrefix}-option-${list2.active}` : void 0,
       placeholder: "Find a project",
-      value: list.query,
-      onChange: (event) => list.setQuery(event.target.value),
-      onKeyDown: (event) => list.onKeyDown(event, onPick, onClose)
+      value: list2.query,
+      onChange: (event) => list2.setQuery(event.target.value),
+      onKeyDown: (event) => list2.onKeyDown(event, onPick, onClose)
     })
   ] });
 }
-function SwitcherOptions({ idPrefix, list, scope, projects, onPick }) {
-  const activeId = `${idPrefix}-option-${list.active}`;
+function SwitcherOptions({ idPrefix, list: list2, scope, projects, onPick }) {
+  const activeId = `${idPrefix}-option-${list2.active}`;
   useEffect(() => {
     document.getElementById(activeId)?.scrollIntoView?.({ block: "nearest" });
   }, [activeId]);
-  if (!list.entries.length) return jsx("p", { role: "status", className: "dy-sw-empty", children: "No matching projects" });
-  return jsx("div", { role: "listbox", id: `${idPrefix}-options`, "aria-label": "Projects", className: "dy-sw-options", children: list.entries.map((entry, index) => {
+  if (!list2.entries.length) return jsx("p", { role: "status", className: "dy-sw-empty", children: "No matching projects" });
+  return jsx("div", { role: "listbox", id: `${idPrefix}-options`, "aria-label": "Projects", className: "dy-sw-options", children: list2.entries.map((entry, index) => {
     const project = entry.project;
     const [tone, healthLabel] = entry.all ? ["neutral", ""] : healthOf(project);
     const meta = entry.all ? `Every project \xB7 ${plural(projects.length, "project")}` : projectMeta(project);
@@ -6321,11 +6321,11 @@ function SwitcherOptions({ idPrefix, list, scope, projects, onPick }) {
       "aria-selected": entry.id === scope,
       "aria-label": entry.all ? "All projects" : projectName(project),
       className: "dy-sw-option",
-      "data-active": index === list.active ? "true" : void 0,
+      "data-active": index === list2.active ? "true" : void 0,
       "data-project-option": entry.id,
       onMouseDown: (event) => event.preventDefault(),
       onMouseMove: () => {
-        if (index !== list.active) list.setActive(index);
+        if (index !== list2.active) list2.setActive(index);
       },
       onClick: () => onPick(entry.id),
       children: [
@@ -6371,7 +6371,7 @@ function SwitcherFoot({ onNewProject, onOnboardExisting, onOpenArchived, archive
 function ProjectSwitcher({ projects, scope, onChange, onNewProject, onOnboardExisting, onOpenArchived, archivedCount = 0 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef(null);
-  const list = useSwitcherList(projects, scope);
+  const list2 = useSwitcherList(projects, scope);
   const close = (refocus = true) => {
     setOpen(false);
     if (refocus) trigger.current?.focus();
@@ -6396,14 +6396,14 @@ function ProjectSwitcher({ projects, scope, onChange, onNewProject, onOnboardExi
         "aria-expanded": open,
         "data-scope": scope ?? "",
         onClick: () => {
-          if (!open) list.openAt();
+          if (!open) list2.openAt();
           setOpen(!open);
         },
         children: [...TriggerLabel({ projects, scope }), jsx("span", { className: "dy-sw-caret", children: jsx(Icon, { name: "arrow-up-down" }) }, "caret")]
       }),
       open ? jsxs("div", { className: "dy-sw-popover", role: "dialog", "aria-label": "Switch project", children: [
-        jsx(SwitcherSearch, { idPrefix: "dy-sw", list, onPick: pick, onClose: () => close() }),
-        jsx(SwitcherOptions, { idPrefix: "dy-sw", list, scope, projects, onPick: pick }),
+        jsx(SwitcherSearch, { idPrefix: "dy-sw", list: list2, onPick: pick, onClose: () => close() }),
+        jsx(SwitcherOptions, { idPrefix: "dy-sw", list: list2, scope, projects, onPick: pick }),
         jsx(SwitcherFoot, { onNewProject, onOnboardExisting, onOpenArchived, archivedCount, close })
       ] }) : null
     ]
@@ -6481,8 +6481,8 @@ function initials2(value) {
   return words2.slice(0, 2).map((word) => word.charAt(0).toUpperCase()).join("") || "?";
 }
 function readableLabel(value, fallback = "All") {
-  const text2 = String(value || fallback).replace(/[_-]+/g, " ").trim();
-  return text2 ? `${text2.charAt(0).toUpperCase()}${text2.slice(1)}` : fallback;
+  const text3 = String(value || fallback).replace(/[_-]+/g, " ").trim();
+  return text3 ? `${text3.charAt(0).toUpperCase()}${text3.slice(1)}` : fallback;
 }
 function validationSummary(contract) {
   if (!contract || typeof contract !== "object") return "No validation contract supplied";
@@ -7564,6 +7564,122 @@ function onboardBody(form) {
     autonomy_level: Number(form.autonomy_level)
   };
 }
+var text = (value) => typeof value === "string" ? value : "";
+var list = (value) => Array.isArray(value) ? value : [];
+var strings = (value) => list(value).filter((item) => typeof item === "string");
+var surfaces = (value) => Object.entries(value && typeof value === "object" && !Array.isArray(value) ? value : {}).slice(0, 32).map(([surface, values]) => ({ surface, names: strings(values) }));
+var sourceState = (value) => ["current", "partial", "unavailable"].includes(value) ? value : "unavailable";
+function controlProjects(projects, selectedProject) {
+  return [...new Set(list(projects).map((project) => project.id).filter((id) => typeof id === "string" && SLUG.test(id) && (selectedProject === "*" || id === selectedProject)))];
+}
+function capabilityLabel(item) {
+  const names = { "hermes:techie": "Hermes Techie", "chatgpt-dot:techie": "ChatGPT Techie", "grokbot:projectsmanager": "Grok ProjectsManager", "paseo:integration": "Paseo" };
+  if (Object.hasOwn(names, item.principal_id)) return names[item.principal_id];
+  const name = text(item.display_name) || text(item.profile) || text(item.principal_id);
+  return item.principal_id?.startsWith("paseo:") ? `Paseo \xB7 ${name}` : name;
+}
+function capabilityFreshness(item, registry, now = Date.now()) {
+  const observed = Date.parse(item.observed_at);
+  const expires = Date.parse(item.expires_at);
+  if (registry.state === "unavailable" || !Number.isFinite(observed) || !Number.isFinite(expires) || observed > now + 6e4 || expires < observed) return "unknown";
+  return registry.state === "stale" || item.freshness === "stale" || expires <= now || Date.parse(registry.expires_at) <= now ? "stale" : "current";
+}
+function safeEvidenceUrl(value) {
+  if (typeof value !== "string" || value !== value.trim()) return null;
+  try {
+    const url = new URL(value);
+    const allowed = ["github.com", "gitlab.com", "bitbucket.org", "chatgpt.com", "grok.com"].includes(url.hostname) || /^[a-z0-9-]+\.atlassian\.net$/.test(url.hostname);
+    return url.protocol === "https:" && !url.username && !url.password && !url.port && allowed ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+var evidenceFor = (value) => list(value).filter((item) => item && typeof item === "object").slice(0, 20).map((item) => ({
+  kind: text(item.kind),
+  reference: text(item.reference),
+  observed_at: text(item.observed_at)
+})).filter((item) => item.reference);
+function controlCenterView(payload, projectId, now = Date.now()) {
+  if (typeof projectId !== "string" || !SLUG.test(projectId) || payload?.schema_version !== 1 || payload?.project_id !== projectId) {
+    return { mode: "unavailable", project_id: projectId, error: "Control-center response does not match this project or supported schema." };
+  }
+  const registry = payload.capabilities ?? {};
+  const state = ["current", "stale", "unavailable"].includes(registry.state) ? registry.state : "unavailable";
+  const capabilities = state === "unavailable" ? [] : list(registry.items).filter((item) => item && typeof item.principal_id === "string" && strings(item.projects).includes(projectId)).slice(0, 256).map((item) => ({
+    principal_id: item.principal_id,
+    label: capabilityLabel(item),
+    system: text(item.system),
+    profile: text(item.profile),
+    role: text(item.role),
+    coordinator: text(item.coordinator),
+    projects: strings(item.projects),
+    state: ["configured", "untested", "blocked", "disabled"].includes(item.state) ? item.state : "untested",
+    freshness: capabilityFreshness(item, { ...registry, state }, now),
+    observed_at: text(item.observed_at),
+    expires_at: text(item.expires_at),
+    source: text(item.source),
+    tools: {
+      configured_by_surface: surfaces(item.tools?.configured_by_surface),
+      configured_legacy: strings(item.tools?.configured_legacy),
+      disabled: strings(item.tools?.disabled),
+      known_plugins_by_surface: surfaces(item.tools?.known_plugins_by_surface),
+      effective: "unverified"
+    },
+    plugins: strings(item.plugins),
+    disabled_plugins: strings(item.disabled_plugins),
+    mcp: list(item.mcp).filter((entry) => entry && typeof entry.name === "string").map((entry) => ({
+      name: entry.name,
+      enabled: entry.enabled,
+      tools: strings(entry.tools),
+      excluded_tools: strings(entry.excluded_tools),
+      selection: ["include", "unrestricted"].includes(entry.selection) ? entry.selection : null,
+      effective: "unverified"
+    })),
+    skills: {
+      local_count: Number.isInteger(item.skills?.local_count) ? item.skills.local_count : null,
+      external_count: Number.isInteger(item.skills?.external_count) ? item.skills.external_count : null
+    },
+    model: {
+      provider: text(item.model?.provider),
+      default: text(item.model?.default),
+      fallback_providers: list(item.model?.fallback_providers).filter(Boolean).map((entry) => [text(entry.provider), text(entry.model)].filter(Boolean).join(" / ")).filter(Boolean)
+    },
+    blocker: { owner: text(item.blocker?.owner), reason: text(item.blocker?.reason), next_action: text(item.blocker?.next_action) },
+    evidence: evidenceFor(item.evidence)
+  }));
+  const work = list(payload.work).filter((item) => item && typeof item.initiative_ref === "string" && item.work_id === `initiative:${projectId}:${item.initiative_ref}` && (!item.project_id || item.project_id === projectId)).slice(0, 500).map((item) => ({
+    work_id: item.work_id,
+    initiative_ref: item.initiative_ref,
+    title: text(item.title) || item.initiative_ref,
+    status: text(item.status),
+    needs_dispatch: item.needs_dispatch === true,
+    native: { board: text(item.native?.board), card_id: item.card_error ? "" : text(item.native?.card_id), owner: text(item.native?.owner), status: text(item.native?.status) },
+    card_error: item.card_error === "binding_unavailable",
+    evidence: evidenceFor(item.evidence),
+    jira: null,
+    paseo: []
+  }));
+  return refreshControlCenter({
+    mode: "fleet",
+    project_id: projectId,
+    observed_at: text(payload.observed_at),
+    capabilities: { state, reason: text(registry.reason), observed_at: text(registry.observed_at), expires_at: text(registry.expires_at), items: capabilities },
+    work,
+    needs_you: list(payload.needs_you).filter((item) => item?.project_id === projectId).slice(0, 500),
+    sources: { dispatch: sourceState(payload.sources?.dispatch), needs_you: sourceState(payload.sources?.needs_you) },
+    truncated: ["capabilities", "work", "needs_you"].filter((key) => payload.truncated?.[key] === true)
+  }, now);
+}
+function refreshControlCenter(view, now = Date.now()) {
+  if (view.mode !== "fleet") return view;
+  const registry = view.capabilities;
+  const expired = registry.state === "current" && Date.parse(registry.expires_at) <= now;
+  const capabilities = expired ? { ...registry, state: "stale", reason: "registry_expired" } : registry;
+  return { ...view, capabilities: { ...capabilities, items: capabilities.items.map((item) => ({
+    ...item,
+    freshness: capabilityFreshness(item, capabilities, now)
+  })) } };
+}
 
 // hermes_dockyard_plugin/desktop/src/fleet/ui.js
 var enc = encodeURIComponent;
@@ -7574,6 +7690,193 @@ async function fleetRead(main, extra) {
   if (health?.fleet !== true) return { mode: "vanilla" };
   const [first, second] = await Promise.all([read(main), read(extra)]);
   return first.error ? { mode: "unavailable", error: first.error } : { mode: "fleet", data: first.data, extra: second.data, extraError: second.error };
+}
+var CONTROL_CSS = `
+.dockyard-root .dy-control { min-width:0; margin:0 0 20px; padding:18px; border:1px solid var(--dy-border); border-radius:14px; background:var(--dy-surface); color:var(--dy-text); overflow-wrap:anywhere; }
+.dockyard-root .dy-control h2 { margin:0; font-size:18px; }
+.dockyard-root .dy-control h3 { margin:16px 0 8px; font-size:14px; }
+.dockyard-root .dy-control p { margin:6px 0; }
+.dockyard-root .dy-control-head, .dockyard-root .dy-control-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; min-width:0; }
+.dockyard-root .dy-control-head > *, .dockyard-root .dy-control-actions > * { min-width:0; }
+.dockyard-root .dy-control-project { border-top:1px solid var(--dy-border); margin-top:14px; padding-top:12px; min-width:0; }
+.dockyard-root .dy-control summary { cursor:pointer; overflow-wrap:anywhere; }
+.dockyard-root .dy-control-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:10px; min-width:0; }
+.dockyard-root .dy-control-item { min-width:0; padding:12px; border:1px solid var(--dy-border); border-radius:9px; background:var(--dy-surface-subtle); }
+.dockyard-root .dy-control-item .dockyard-status-tag { white-space:normal; }
+.dockyard-root .dy-control-item summary { font-weight:600; }
+.dockyard-root .dy-control-facts { display:grid; grid-template-columns:minmax(70px,auto) minmax(0,1fr); gap:5px 12px; font-size:12px; margin:10px 0; }
+.dockyard-root .dy-control-facts dt { color:var(--dy-text-2); }
+.dockyard-root .dy-control-facts dd { margin:0; min-width:0; }
+.dockyard-root .dy-control a { color:var(--dy-accent-text); }
+.dockyard-root .dy-control ul { margin:8px 0; padding-left:18px; }
+.dockyard-root .dy-control-blocker { border-left:3px solid var(--dy-warning); padding-left:9px; font-size:12px; }
+.dockyard-root .dy-control-more { margin-top:10px; }
+`;
+var STATE_LABELS = { configured: "Configured \xB7 untested", untested: "Untested", blocked: "Blocked", disabled: "Disabled" };
+var stateTone = (state) => state === "blocked" || state === "unavailable" ? "danger" : state === "stale" || state === "partial" ? "warning" : "neutral";
+var when = (value) => value && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString().replace("T", " ").replace(".000Z", " UTC") : "Not recorded";
+var readable = (value) => String(value || "unknown").replaceAll("_", " ");
+var surfaceText = (entries) => entries.map((entry) => `${entry.surface}: ${entry.names.join(", ") || "None recorded"}`).join("; ") || "None recorded";
+var mcpText = (entry) => {
+  const enabled = entry.enabled === true ? "configured enabled" : entry.enabled === false ? "disabled" : "enablement unknown";
+  const selection = entry.selection === "unrestricted" ? "no include restriction configured" : entry.selection === "include" ? `included tools: ${entry.tools.join(", ") || "none recorded"}` : `selection not recorded${entry.tools.length ? `; listed tools: ${entry.tools.join(", ")}` : ""}`;
+  return `${entry.name} (${enabled}; ${selection}${entry.excluded_tools.length ? `; excluded tools: ${entry.excluded_tools.join(", ")}` : ""}; effective unverified)`;
+};
+var facts = (entries) => jsx("dl", { className: "dy-control-facts", children: entries.flatMap(([label, value]) => [
+  jsx("dt", { children: label }, `${label}-label`),
+  jsx("dd", { children: value || "Not recorded" }, label)
+]) });
+function ControlEvidence({ evidence }) {
+  if (!evidence.length) return jsx("p", { className: "dockyard-meta", children: "Evidence: not recorded" });
+  return jsx("ul", { "aria-label": "Evidence references", children: evidence.map((item, index) => {
+    const href = safeEvidenceUrl(item.reference);
+    return jsxs("li", { children: [
+      item.kind ? `${readable(item.kind)} \xB7 ` : null,
+      href ? jsx("a", { href, target: "_blank", rel: "noopener noreferrer", children: item.reference }) : item.reference,
+      jsx("span", { className: "dockyard-meta", children: ` \xB7 ${when(item.observed_at)}` })
+    ] }, index);
+  }) });
+}
+function ControlPrincipal({ item }) {
+  const blocker = item.blocker;
+  return jsxs("article", { className: "dy-control-item", "data-control-principal": item.principal_id, children: [
+    jsxs("div", { className: "dy-control-head", children: [
+      jsx("strong", { children: item.label }),
+      jsx(StatusTag, { tone: stateTone(item.state), label: STATE_LABELS[item.state] })
+    ] }),
+    jsx("p", { className: "dockyard-meta", children: `${item.principal_id} \xB7 ${item.role || "Role not recorded"}` }),
+    jsx("p", { className: "dockyard-meta", children: `Owner: ${blocker.owner || item.coordinator || "Not recorded"} \xB7 Observation ${item.freshness}` }),
+    blocker.reason || blocker.next_action || item.state === "blocked" ? jsxs("div", { className: "dy-control-blocker", children: [
+      jsx("p", { children: blocker.reason || "Connection blocked; reason not recorded." }),
+      jsx("p", { children: `Next action: ${blocker.next_action || "Owner to record the next action."}` })
+    ] }) : null,
+    jsxs("details", { children: [
+      jsx("summary", { children: "Scope, capability and evidence" }),
+      facts([
+        ["Scope", item.projects.join(", ")],
+        ["Product / profile", [item.system, item.profile].filter(Boolean).join(" / ")],
+        ["Coordinator", item.coordinator],
+        ["Observed", when(item.observed_at)],
+        ["Expires", when(item.expires_at)],
+        ["Source", item.source],
+        ["Configured tools by surface", surfaceText(item.tools.configured_by_surface)],
+        ["Legacy tool configuration", item.tools.configured_legacy.join(", ") || "None recorded"],
+        ["Disabled tools", item.tools.disabled.join(", ") || "None recorded"],
+        ["Known plugins by surface", surfaceText(item.tools.known_plugins_by_surface)],
+        ["Effective tools", "Unverified"],
+        ["Plugins", item.plugins.join(", ") || "None recorded"],
+        ["Disabled plugins", item.disabled_plugins.join(", ") || "None recorded"],
+        ["MCP", item.mcp.map(mcpText).join("; ") || "None recorded"],
+        ["Skills", `Local: ${item.skills.local_count ?? "unknown"} \xB7 External: ${item.skills.external_count ?? "unknown"}`],
+        ["Model", [item.model.provider, item.model.default].filter(Boolean).join(" / ")],
+        ["Fallback models", item.model.fallback_providers.join(", ") || "None recorded"],
+        ["Effective model", "Unverified"]
+      ]),
+      jsx(ControlEvidence, { evidence: item.evidence })
+    ] })
+  ] });
+}
+function ControlWork({ item, projectId, onOpen }) {
+  return jsxs("article", { className: "dy-control-item", "data-control-work": item.work_id, children: [
+    jsxs("div", { className: "dy-control-head", children: [
+      jsx("strong", { children: item.title }),
+      jsx(StatusTag, { tone: item.needs_dispatch ? "warning" : "neutral", label: item.needs_dispatch ? "Needs owner" : readable(item.status) })
+    ] }),
+    jsx("p", { className: "dockyard-meta", children: `${item.initiative_ref} \xB7 Owner: ${item.native.owner || "Unassigned"}` }),
+    jsx("p", { className: "dockyard-meta", children: item.card_error ? "Native binding unavailable" : item.native.card_id ? `Hermes: ${item.native.card_id} on ${item.native.board || "unknown board"} \xB7 ${readable(item.native.status)}` : "Native card: not linked" }),
+    jsxs("details", { children: [
+      jsx("summary", { children: "Work links and result evidence" }),
+      facts([["Work ID", item.work_id], ["Jira", "Not linked"], ["Paseo", "Not linked"]]),
+      jsx(ControlEvidence, { evidence: item.evidence }),
+      jsx("p", { className: "dockyard-meta", children: "Delivery confirmation stays in the existing human approval controls." })
+    ] }),
+    item.native.card_id ? jsx(Button, { small: true, onClick: () => onOpen?.(`s2:work/${item.native.card_id}`, { projectId }), children: "Open native work" }) : null
+  ] });
+}
+function ControlRows({ items, render, noun }) {
+  return jsxs(Fragment, { children: [
+    jsx("div", { className: "dy-control-grid", children: items.slice(0, 6).map(render) }),
+    items.length > 6 ? jsxs("details", { className: "dy-control-more", children: [
+      jsx("summary", { children: `${items.length - 6} more ${noun}` }),
+      jsx("div", { className: "dy-control-grid", children: items.slice(6).map(render) })
+    ] }) : null
+  ] });
+}
+function ControlCenterProject({ view, onOpen, onSettings, onApprovals }) {
+  const registry = view.capabilities;
+  const blocked = registry?.items.filter((item) => item.state === "blocked").length ?? 0;
+  const stale = registry?.items.filter((item) => item.freshness === "stale").length ?? 0;
+  const teamSummary = registry?.state === "unavailable" ? "Team evidence unavailable" : `${registry?.items.length ?? 0} team entries (${blocked} blocked, ${stale} stale)`;
+  const workSummary = view.sources?.dispatch === "unavailable" ? "Native work unavailable" : `${view.work?.length ?? 0} active work`;
+  return jsxs("details", { className: "dy-control-project", "data-control-project": view.project_id, children: [
+    jsx("summary", { children: view.mode === "fleet" ? `${view.project_id} \xB7 ${teamSummary} \xB7 ${workSummary} \xB7 Registry ${registry.state} \xB7 Native work ${view.sources.dispatch}${view.sources.needs_you !== "current" ? ` \xB7 Needs you ${view.sources.needs_you}` : ""}` : `${view.project_id} \xB7 Control center unavailable` }),
+    jsxs("div", { className: "dy-control-head", children: [
+      jsx("strong", { children: view.project_id }),
+      jsxs("div", { className: "dy-control-actions", children: [
+        jsx(Button, { small: true, onClick: () => onOpen?.(`s1:project/${view.project_id}`), children: "Project overview" }),
+        jsx(Button, { small: true, onClick: () => onSettings?.(view.project_id), children: "Project settings" }),
+        jsx(Button, { small: true, onClick: () => onApprovals?.(view.project_id), children: "Approvals" })
+      ] })
+    ] }),
+    view.mode !== "fleet" ? jsx("p", { className: "dockyard-inline-error", role: "status", children: `Control center unavailable: ${view.error}` }) : jsxs(Fragment, { children: [
+      jsx("p", { className: "dockyard-meta", children: `Observed ${when(view.observed_at)} \xB7 Native work ${view.sources.dispatch} \xB7 Needs you ${view.sources.needs_you}${view.sources.needs_you === "current" ? ` (${view.needs_you.length})` : ""}` }),
+      jsx("h3", { children: "Team and connections" }),
+      jsx("p", { className: "dockyard-meta", children: `Capability registry ${registry.state}${registry.reason ? ` \xB7 ${readable(registry.reason)}` : ""} \xB7 Observed ${when(registry.observed_at)}` }),
+      registry.items.length ? jsx(ControlRows, { items: registry.items, noun: "team members", render: (item) => jsx(ControlPrincipal, { item }, item.principal_id) }) : jsx("p", { role: "status", children: registry.state === "unavailable" ? "Capability evidence is unavailable. Connection readiness is unknown." : "No capability observations recorded for this project." }),
+      jsx("h3", { children: "Active work" }),
+      view.sources.dispatch !== "current" ? jsx("p", { className: "dockyard-inline-error", role: "status", children: `Native work source ${view.sources.dispatch}; this list may be incomplete.` }) : null,
+      view.work.length ? jsx(ControlRows, { items: view.work, noun: "work items", render: (item) => jsx(ControlWork, { item, projectId: view.project_id, onOpen }, item.work_id) }) : jsx("p", { className: "dockyard-meta", children: view.sources.dispatch === "current" ? "No active initiatives reported." : "Active work cannot be confirmed." }),
+      view.truncated.length ? jsx("p", { className: "dockyard-meta", children: `Limited snapshot: ${view.truncated.map(readable).join(", ")}. Open the project for the full view.` }) : null
+    ] })
+  ] });
+}
+function FleetControlCenter({ projects, selectedProject, refreshedAt, onOpen, onSettings, onApprovals }) {
+  useStylesheet("dy-control-stylesheet", "dyControlStylesheet", CONTROL_CSS);
+  const scope = controlProjects(projects, selectedProject).join(",");
+  const [state, setState] = useState({ mode: "loading", scope: "" });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setState({ mode: "loading", scope });
+    if (!scope) return () => {
+      current = false;
+    };
+    fleetRead().then(async (result) => {
+      if (!current) return;
+      if (result.mode !== "fleet") {
+        setState({ ...result, scope });
+        return;
+      }
+      const views = await Promise.all(scope.split(",").map(async (projectId) => {
+        const response = await read(`/control-center?project_id=${enc(projectId)}`);
+        return response.error ? { mode: "unavailable", project_id: projectId, error: response.error } : controlCenterView(response.data, projectId);
+      }));
+      if (current) setState({ mode: "fleet", scope, views });
+    });
+    return () => {
+      current = false;
+    };
+  }, [scope, refreshedAt, revision]);
+  useEffect(() => {
+    const now = Date.now();
+    const expiries = (state.views ?? []).filter((view) => view.mode === "fleet").flatMap((view) => [
+      view.capabilities.expires_at,
+      ...view.capabilities.items.map((item) => item.expires_at)
+    ]).map(Date.parse).filter((expires) => Number.isFinite(expires) && expires > now);
+    if (!expiries.length) return void 0;
+    const timer = window.setTimeout(() => setState((current) => current.mode === "fleet" ? { ...current, views: current.views.map((view) => refreshControlCenter(view)) } : current), Math.min(Math.min(...expiries) - now + 1, 2147483647));
+    return () => window.clearTimeout(timer);
+  }, [state.views]);
+  if (!scope || state.mode === "vanilla") return null;
+  const loading = state.scope !== scope || state.mode === "loading";
+  return jsxs("section", { className: "dy-control", "data-fleet-control-center": true, "aria-label": "Project control center", "aria-busy": loading, children: [
+    jsxs("div", { className: "dy-control-head", children: [
+      jsx("h2", { children: "Connected team and work" }),
+      jsx(Button, { small: true, disabled: loading, action: "refresh-control-center", onClick: () => setRevision((value) => value + 1), children: "Refresh connections" })
+    ] }),
+    jsx("p", { className: "dockyard-meta", children: "Project owners, connection evidence and active work. Configured capabilities still require a successful test." }),
+    loading ? jsx("p", { role: "status", children: "Reading project connections\u2026" }) : state.views?.map((view) => jsx(ControlCenterProject, { view, onOpen, onSettings, onApprovals }, view.project_id))
+  ] });
 }
 function useEscape(busy, onCancel) {
   useEffect(() => {
@@ -7801,7 +8104,7 @@ function FleetNeedPanel({ item, fleet, onChanged }) {
   if (!need) return null;
   if (need.kind === "resolved") return jsx("p", { className: "dockyard-meta", "data-fleet-need": "resolved", children: "No longer in the Needs-you queue." });
   const initiative = { ref: need.ref, title: need.title, project_id: need.project_id };
-  const facts = [
+  const facts2 = [
     need.card_id ? `card ${need.card_id} on ${need.board}${need.card_title && need.card_title !== need.title ? ` \xB7 ${need.card_title}` : ""}` : null,
     need.kind === "blocked_card" ? `${need.assignee ? `assigned to ${need.assignee}` : "unassigned"}${need.block_kind ? ` \xB7 ${String(need.block_kind).replaceAll("_", " ")}` : ""}` : null,
     need.task_id && !need.card_id ? `Implement card ${need.task_id}` : null
@@ -7816,7 +8119,7 @@ function FleetNeedPanel({ item, fleet, onChanged }) {
     }
   };
   return jsxs("div", { className: "dockyard-fleet-need", "data-fleet-need": need.kind, style: { minWidth: 0, overflowWrap: "anywhere" }, children: [
-    facts ? jsx("p", { className: "dockyard-meta", children: facts }) : null,
+    facts2 ? jsx("p", { className: "dockyard-meta", children: facts2 }) : null,
     need.kind !== "approval" && need.detail ? jsx("p", { children: need.detail }) : null,
     need.steps ? jsx("h4", { children: need.kind === "wait_suggested" ? "Evidence" : "Next action" }) : null,
     need.steps && need.steps_from ? jsx("p", { className: "dockyard-meta", children: `From ${need.steps_from}` }) : null,
@@ -7870,7 +8173,7 @@ function BindOnlyWizard({ intent, options, error: loadError, onRetry, onClose, o
     jsx("label", { htmlFor: `dockyard-fleet-onboard-${key}`, children: label }, `${key}-label`),
     jsxs("select", { id: `dockyard-fleet-onboard-${key}`, "data-field": key.replaceAll("_", "-"), value: form[key], disabled: submitting, onChange: set(key), children: [
       placeholder ? jsx("option", { value: "", children: placeholder }) : null,
-      ...choices.map(([value, text2]) => jsx("option", { value, children: text2 }, value))
+      ...choices.map(([value, text3]) => jsx("option", { value, children: text3 }, value))
     ] }, key)
   ];
   return jsx("div", {
@@ -8207,12 +8510,12 @@ function ApprovalDetail({ item, onResolved, onBack }) {
 }
 
 // hermes_dockyard_plugin/desktop/src/views/bulk-import.js
-function normaliseBulkImportText(text2, mode) {
-  let csvText = text2;
+function normaliseBulkImportText(text3, mode) {
+  let csvText = text3;
   if (mode === "json") {
     let rowsJson;
     try {
-      rowsJson = JSON.parse(text2);
+      rowsJson = JSON.parse(text3);
       if (!Array.isArray(rowsJson)) throw new Error("JSON must be an array");
       if (rowsJson.some((row) => row?.initiative_ref)) throw new Error("initiative_ref is not supported by bulk import; link the item after import");
       const supported = /* @__PURE__ */ new Set(["row_key", "type", "title", "parent", "parent_key", "labels", "estimate_days", "due"]);
@@ -10106,13 +10409,13 @@ function BacklogView({ view, onRefresh, preset }) {
   const parseImport = (advance) => {
     setImportError(null);
     setImportValid(false);
-    const text2 = importText.trim();
-    if (!text2) {
+    const text3 = importText.trim();
+    if (!text3) {
       setImportError("Paste CSV lines or a JSON array first.");
       setImportRows(null);
       return;
     }
-    const normalised = normaliseBulkImportText(text2, importMode);
+    const normalised = normaliseBulkImportText(text3, importMode);
     if (normalised.error) {
       setImportError(normalised.error);
       setImportRows(null);
@@ -10565,7 +10868,7 @@ var rectOf = (item) => ({
 });
 var overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 var inflate = (r, by) => ({ x: r.x - by, y: r.y - by, width: r.width + by * 2, height: r.height + by * 2 });
-var labelSize = (text2) => ({ width: String(text2).length * LABEL_CHAR_W + LABEL_PAD_X, height: LABEL_H });
+var labelSize = (text3) => ({ width: String(text3).length * LABEL_CHAR_W + LABEL_PAD_X, height: LABEL_H });
 var anchors = (from, to) => {
   const fcx = from.x + from.width / 2;
   const fcy = from.y + from.height / 2;
@@ -10598,8 +10901,8 @@ var layoutConnectors = (objects, connectors, labelFor = (m) => m, world = { widt
     const offset = (index - (siblings.length - 1) / 2) * PARALLEL_GAP;
     const a = anchors(rectOf(byId.get(edge.source)), rectOf(byId.get(edge.target)));
     const line = a.axis === "h" ? { x1: a.x1, y1: a.y1 + offset, x2: a.x2, y2: a.y2 + offset } : { x1: a.x1 + offset, y1: a.y1, x2: a.x2 + offset, y2: a.y2 };
-    const text2 = labelFor(edge.meaning);
-    const size = labelSize(text2);
+    const text3 = labelFor(edge.meaning);
+    const size = labelSize(text3);
     const dx = line.x2 - line.x1;
     const dy = line.y2 - line.y1;
     const length = Math.hypot(dx, dy) || 1;
@@ -10627,7 +10930,7 @@ var layoutConnectors = (objects, connectors, labelFor = (m) => m, world = { widt
       source: edge.source,
       target: edge.target,
       ...line,
-      label: text2,
+      label: text3,
       labelBox: pick.box,
       anchor: { x: pick.ax, y: pick.ay },
       // A label pushed away from its line gets a short leader so it is still
@@ -10643,8 +10946,8 @@ var layoutFrames = (objects, world = { width: 2e3, height: 1400 }) => {
     ;
     (Array.isArray(item.tags) ? item.tags : []).forEach((tag) => groups.set(tag, [...groups.get(tag) ?? [], item]));
   });
-  return [...groups.entries()].filter(([, list]) => list.length >= 2).map(([tag, list]) => {
-    const rects = list.map(rectOf);
+  return [...groups.entries()].filter(([, list2]) => list2.length >= 2).map(([tag, list2]) => {
+    const rects = list2.map(rectOf);
     const left = Math.max(0, Math.min(...rects.map((r) => r.x)) - CANVAS_FRAME_PAD.side);
     const top = Math.max(0, Math.min(...rects.map((r) => r.y)) - CANVAS_FRAME_PAD.top);
     const right = Math.min(world.width, Math.max(...rects.map((r) => r.x + r.width)) + CANVAS_FRAME_PAD.side);
@@ -10666,9 +10969,9 @@ var MAX_LIST_LEVELS = 5;
 var MARK_ORDER = ["bold", "italic", "underline", "strike", "fontSize"];
 var RICH_TEXT_LIMITS = Object.freeze({ chars: 2e4, nodes: 3e3, bytes: 64 * 1024 });
 var ZWSP = /\u200B/g;
-var plainToDoc = (text2) => ({
+var plainToDoc = (text3) => ({
   type: "doc",
-  content: String(text2 ?? "").split("\n").map((line) => line ? { type: "paragraph", content: [{ type: "text", text: line }] } : { type: "paragraph" })
+  content: String(text3 ?? "").split("\n").map((line) => line ? { type: "paragraph", content: [{ type: "text", text: line }] } : { type: "paragraph" })
 });
 var alignOf = (el2) => {
   const raw = String(el2.style?.textAlign || el2.getAttribute?.("align") || "").toLowerCase();
@@ -10691,8 +10994,8 @@ var markList = (marks) => MARK_ORDER.filter((m) => marks[m]).map((m) => m === "f
 var sameMarks = (a = [], b = []) => JSON.stringify(a) === JSON.stringify(b);
 var BLOCK_TAGS = /* @__PURE__ */ new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI", "BLOCKQUOTE", "PRE", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH", "SECTION", "ARTICLE", "HEADER", "FOOTER", "FIGURE", "DL", "DT", "DD"]);
 var SKIP_TAGS = /* @__PURE__ */ new Set(["SCRIPT", "STYLE", "TEMPLATE", "NOSCRIPT", "IFRAME", "OBJECT", "EMBED", "IMG", "SVG", "VIDEO", "AUDIO", "CANVAS", "HEAD", "TITLE", "META", "LINK", "BUTTON", "INPUT", "SELECT", "TEXTAREA"]);
-function pushText(inline, text2, marks) {
-  const clean = text2.replace(ZWSP, "").replace(/[\r\n\t\u00A0]+/g, " ");
+function pushText(inline, text3, marks) {
+  const clean = text3.replace(ZWSP, "").replace(/[\r\n\t\u00A0]+/g, " ");
   if (!clean) return;
   const m = markList(marks);
   const last = inline[inline.length - 1];
@@ -10751,7 +11054,7 @@ function readList(el2, ctx) {
       const nested = readList(child, { ...ctx, level });
       if (!nested.length) continue;
       if (items.length && level < MAX_LIST_LEVELS) items[items.length - 1].content.push(...nested);
-      else items.push(...nested.flatMap((list2) => list2.content || []));
+      else items.push(...nested.flatMap((list3) => list3.content || []));
     } else {
       const loose = readBlocks({ childNodes: [child] }, { ...ctx, level });
       for (const b of loose) {
@@ -10776,7 +11079,7 @@ function readList(el2, ctx) {
   if (level > MAX_LIST_LEVELS) {
     return [{ type: "__lift", content: lifted }];
   }
-  const list = { type: el2.tagName === "OL" ? "orderedList" : "bulletList", content: lifted };
+  const list2 = { type: el2.tagName === "OL" ? "orderedList" : "bulletList", content: lifted };
   if (el2.tagName === "OL") {
     const attrs = {};
     const start = Number.parseInt(el2.getAttribute("start") ?? "1", 10);
@@ -10784,9 +11087,9 @@ function readList(el2, ctx) {
     if (attrs.start === 1) delete attrs.start;
     const kind = el2.getAttribute("type");
     if (kind && LIST_TYPES.includes(kind) && kind !== "1") attrs.type = kind;
-    if (Object.keys(attrs).length) list.attrs = attrs;
+    if (Object.keys(attrs).length) list2.attrs = attrs;
   }
-  return [list];
+  return [list2];
 }
 var stripUndefined = (node) => {
   if (node.attrs === void 0) delete node.attrs;
@@ -10956,15 +11259,15 @@ function normaliseDom(host4, { afterDelete = false } = {}) {
     changed = true;
   };
   const walker = document.createTreeWalker(host4, 4);
-  for (let text2 = walker.nextNode(); text2; text2 = walker.nextNode()) {
-    const value = text2.nodeValue || "";
+  for (let text3 = walker.nextNode(); text3; text3 = walker.nextNode()) {
+    const value = text3.nodeValue || "";
     if (!value.includes("\u200B") || value.replace(ZWSP, "") === "") continue;
     if (keep) {
       for (const i of [0, 2]) {
-        if (keep[i] === text2) keep[i + 1] -= (value.slice(0, keep[i + 1]).match(ZWSP) || []).length;
+        if (keep[i] === text3) keep[i + 1] -= (value.slice(0, keep[i + 1]).match(ZWSP) || []).length;
       }
     }
-    text2.nodeValue = value.replace(ZWSP, "");
+    text3.nodeValue = value.replace(ZWSP, "");
     changed = true;
   }
   for (const el2 of [...host4.querySelectorAll("b, i, strike, del")]) {
@@ -11116,12 +11419,12 @@ function selectedTexts(host4) {
   if (sc.nodeType === 3 && so > 0 && so < sc.nodeValue.length) first = sc.splitText(so);
   const out = [];
   const walker = document.createTreeWalker(host4, 4);
-  for (let text2 = walker.nextNode(); text2; text2 = walker.nextNode()) {
-    if (!text2.nodeValue || !range.intersectsNode(text2)) continue;
-    if (text2 === sc && !first && so >= text2.nodeValue.length) continue;
-    if (text2 === ec && eo === 0 && text2 !== first) continue;
-    if (first && text2 === sc) continue;
-    out.push(text2);
+  for (let text3 = walker.nextNode(); text3; text3 = walker.nextNode()) {
+    if (!text3.nodeValue || !range.intersectsNode(text3)) continue;
+    if (text3 === sc && !first && so >= text3.nodeValue.length) continue;
+    if (text3 === ec && eo === 0 && text3 !== first) continue;
+    if (first && text3 === sc) continue;
+    out.push(text3);
   }
   return out;
 }
@@ -11187,7 +11490,7 @@ function setBlockStyle(host4, style) {
 function clearFormatting(host4) {
   const texts = selectedTexts(host4);
   const blocks = blocksIn(host4);
-  for (const text2 of texts) liftOut(host4, text2, isMark);
+  for (const text3 of texts) liftOut(host4, text3, isMark);
   for (const block of blocks) {
     block.style.removeProperty("text-align");
     if (!block.getAttribute("style")) block.removeAttribute("style");
@@ -11207,9 +11510,9 @@ function stateAt(host4) {
   const node = sel.anchorNode;
   const heading = closestIn(host4, node, (el2) => /^H[1-3]$/.test(el2.tagName));
   const sized = closestIn(host4, node, (el2) => el2.hasAttribute("data-size"));
-  const list = closestIn(host4, node, (el2) => el2.tagName === "UL" || el2.tagName === "OL");
+  const list2 = closestIn(host4, node, (el2) => el2.tagName === "UL" || el2.tagName === "OL");
   const block = blockOf(host4, node);
-  const align = !list && block && alignOf(block) || "left";
+  const align = !list2 && block && alignOf(block) || "left";
   const q = (c) => {
     try {
       return document.queryCommandState(c);
@@ -11222,8 +11525,8 @@ function stateAt(host4) {
     style: heading ? heading.tagName.toLowerCase() : "p",
     size: sized && RICH_TEXT_SIZES.includes(sized.getAttribute("data-size")) ? sized.getAttribute("data-size") : "normal",
     align,
-    list: list ? list.tagName : null,
-    anyList: Boolean(list) || blocksIn(host4).some((b) => closestIn(host4, b, (el2) => el2.tagName === "UL" || el2.tagName === "OL")),
+    list: list2 ? list2.tagName : null,
+    anyList: Boolean(list2) || blocksIn(host4).some((b) => closestIn(host4, b, (el2) => el2.tagName === "UL" || el2.tagName === "OL")),
     bold: has(["STRONG", "B"]) || !heading && q("bold"),
     italic: has(["EM", "I"]) || q("italic"),
     underline: has(["U"]) || q("underline"),
@@ -11254,12 +11557,12 @@ function applySize(host4, size) {
     return;
   }
   const texts = selectedTexts(host4);
-  for (const text2 of texts) {
-    liftOut(host4, text2, (el2) => el2.hasAttribute("data-size"));
+  for (const text3 of texts) {
+    liftOut(host4, text3, (el2) => el2.hasAttribute("data-size"));
     if (size !== "normal") {
       const span = sizeSpan(size);
-      text2.before(span);
-      span.appendChild(text2);
+      text3.before(span);
+      span.appendChild(text3);
     }
   }
   reselect(texts);
@@ -12016,9 +12319,9 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     setBoardBusy(true);
     try {
       await api(boardPath(board.canvas_id), { method: "PATCH", body: { status: "archived" } });
-      const list = await refreshBoards();
+      const list2 = await refreshBoards();
       if (active) {
-        const next = (list ?? []).find((row) => row.status !== "archived" && row.canvas_id !== board.canvas_id);
+        const next = (list2 ?? []).find((row) => row.status !== "archived" && row.canvas_id !== board.canvas_id);
         const fresh = next ? await api(boardPath(next.canvas_id)) : await api(`/projects/${encoded}/canvas`);
         loadBoard(fresh);
         if (!next) await refreshBoards();
@@ -12312,8 +12615,8 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     }
   };
   saveRef.current = save2;
-  const addObject = (objectKind, text2) => {
-    const body = String(text2 ?? "").trim();
+  const addObject = (objectKind, text3) => {
+    const body = String(text3 ?? "").trim();
     if (!body || readOnly) return null;
     const before = snapshot(objects, connectors);
     const position = canvasPlaced(objects);
@@ -12376,8 +12679,8 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
   };
   const applyDrawer = () => {
     if (!selected || readOnly) return;
-    const text2 = drawerText.trim();
-    if (!text2) return;
+    const text3 = drawerText.trim();
+    if (!text3) return;
     if (richProblem) {
       setNotice({ tone: "danger", text: richProblem });
       return;
@@ -12400,7 +12703,7 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     };
     if (typeof selected.content?.url === "string" && !Array.isArray(selected.content?.links)) fields.url = "";
     const before = snapshot(objects, connectors);
-    setObjects((current) => current.map((item) => item.id === selected.id ? { ...item, kind: drawerKind, content: { ...item.content ?? {}, ...fields, text: text2 } } : item));
+    setObjects((current) => current.map((item) => item.id === selected.id ? { ...item, kind: drawerKind, content: { ...item.content ?? {}, ...fields, text: text3 } } : item));
     setHistory((current) => [...current.slice(-49), before]);
     setFuture([]);
     setDirty(true);
@@ -12800,11 +13103,11 @@ function PlanningCanvasPanel({ project, canvas: initialCanvas, content = [], onR
     if (boardRef.current === at) setBusy(false);
   };
   const sendChat = async () => {
-    const text2 = chatDraft.trim();
-    if (!text2 || chatBusy) return;
-    setChatLog((current) => [...current, { role: "me", text: text2 }]);
+    const text3 = chatDraft.trim();
+    if (!text3 || chatBusy) return;
+    setChatLog((current) => [...current, { role: "me", text: text3 }]);
     setChatDraft("");
-    await curate(text2);
+    await curate(text3);
   };
   const stopChat = () => {
     chatToken.current += 1;
@@ -14155,9 +14458,9 @@ function buildActivityThread(items, opts = {}) {
   const max = opts.max ?? 8;
   const wrap = document.createElement("div");
   wrap.className = "dy-activity-thread";
-  const list = items.slice(0, max);
+  const list2 = items.slice(0, max);
   const rows = [];
-  list.forEach((it) => {
+  list2.forEach((it) => {
     const row = document.createElement("div");
     row.className = "dy-activity-item";
     row.style.opacity = opts.decay ? "1" : "";
@@ -14174,7 +14477,7 @@ function buildActivityThread(items, opts = {}) {
     wrap.appendChild(row);
     rows.push(row);
   });
-  if (list.length === 0) {
+  if (list2.length === 0) {
     const empty = document.createElement("p");
     empty.className = "dy-dim";
     empty.textContent = "No recent activity.";
@@ -14252,7 +14555,7 @@ var NOT_IN_LATEST_PLAN = "This step is not in the latest version of the workflow
 function deletePlan(nodes, id) {
   const target = nodes.find((n) => n.node_id === id);
   if (!target) return NOT_IN_LATEST_PLAN;
-  const names = (list) => list.map((n) => `"${n.title}"`).join(", ");
+  const names = (list2) => list2.map((n) => `"${n.title}"`).join(", ");
   const checks = nodes.filter((n) => n.node_id !== id && n.when?.node === id);
   if (checks.length) {
     return checks.length === 1 ? `Can't delete "${target.title}": ${names(checks)} has a condition that checks it. Change or remove that condition first.` : `Can't delete "${target.title}": ${names(checks)} have conditions that check it. Change or remove those conditions first.`;
@@ -14423,10 +14726,10 @@ var prefersReducedMotion = () => {
     return false;
   }
 };
-function elu(tag, cls, text2) {
+function elu(tag, cls, text3) {
   const el2 = document.createElement(tag);
   if (cls) el2.className = cls;
-  if (text2 !== void 0) el2.textContent = text2;
+  if (text3 !== void 0) el2.textContent = text3;
   return el2;
 }
 function sEl(tag, attrs) {
@@ -14588,14 +14891,14 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
   feedHead.setAttribute("aria-expanded", "true");
   feed.append(feedHead, feedBody);
   const feedMsgs = [];
-  const feedLog = (text2) => {
+  const feedLog = (text3) => {
     const item = elu("div", "dy-wf-feed-item");
     const t = elu("span", "dy-wf-feed-time");
     t.textContent = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const b = elu("span", "", " " + text2);
+    const b = elu("span", "", " " + text3);
     item.append(t, b);
     feedBody.prepend(item);
-    feedMsgs.unshift({ ts: Date.now(), text: text2, el: item });
+    feedMsgs.unshift({ ts: Date.now(), text: text3, el: item });
     while (feedMsgs.length > 6) {
       const old = feedMsgs.pop();
       if (old) old.el.remove();
@@ -15265,9 +15568,9 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
       tab.setAttribute("aria-label", `${frame.label}${frame.sublabel ? `. ${frame.sublabel}` : ""}. Open repeat settings`);
       tab.dataset.wfFrameOpen = frame.id;
       const tabBg = sEl("rect", { class: "dy-wf-frame-tabbg", rx: 9, height: FRAME_TAB_H });
-      const text2 = sEl("text", { class: "dy-wf-frame-label" });
-      text2.textContent = frame.label;
-      tab.append(tabBg, text2);
+      const text3 = sEl("text", { class: "dy-wf-frame-label" });
+      text3.textContent = frame.label;
+      tab.append(tabBg, text3);
       g.append(box, tab);
       let sub = null;
       if (frame.sublabel) {
@@ -15289,7 +15592,7 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
         }
       });
       viewport.appendChild(g);
-      frameEls.push({ ids: ids2, box, tabBg, text: text2, sub });
+      frameEls.push({ ids: ids2, box, tabBg, text: text3, sub });
     }
     placeFrames();
     const depMeaning = EDGE_MEANINGS[DEFAULT_EDGE_MEANING];
@@ -15448,11 +15751,11 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
     close.addEventListener("click", () => closePassport());
     head.append(meta, elu("h3", "", n.title), close);
     passport.appendChild(head);
-    const facts = elu("dl", "dy-wf-pp-facts");
+    const facts2 = elu("dl", "dy-wf-pp-facts");
     const fact = (k, v, cls = "") => {
       const row = elu("div", `dy-wf-pp-fact ${cls}`.trim());
       row.append(elu("dt", "", k), elu("dd", "", v));
-      facts.appendChild(row);
+      facts2.appendChild(row);
       return row;
     };
     const updated = lastRun?.updated_at ?? null;
@@ -15462,7 +15765,7 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
     if (n.assignee) fact("Assignee", n.assignee);
     if (n.evidence_refs.length) fact("Evidence", n.evidence_refs.join(", "));
     if (n.task_ref) fact("Work item", n.task_ref);
-    if (!quietFacts) passport.appendChild(facts);
+    if (!quietFacts) passport.appendChild(facts2);
     const nodeEvents = (lastRun?.timeline ?? []).filter((event) => event.node_id === n.node_id);
     if (nodeEvents.length) {
       passport.appendChild(elu("h4", "", "Status history"));
@@ -15484,9 +15787,9 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
       const problem = elu("p", "dy-wf-pp-error");
       problem.setAttribute("role", "alert");
       problem.hidden = true;
-      const say = (text2) => {
-        problem.textContent = text2 ?? "";
-        problem.hidden = !text2;
+      const say = (text3) => {
+        problem.textContent = text3 ?? "";
+        problem.hidden = !text3;
       };
       const field = (label, input) => {
         const f = elu("label", "dy-wf-field");
@@ -15591,10 +15894,10 @@ function mountWorkflowCanvas(host4, projectId, runName, fetchRuns, handlers, pol
         const approve = elu("button", "dy-btn primary", "Approve");
         const reject = elu("button", "dy-btn", "Reject");
         let inFlight = false;
-        const setDecisionState = (state, text2) => {
+        const setDecisionState = (state, text3) => {
           if (!decisionState) return;
           decisionState.setAttribute("data-decision-state", state);
-          decisionState.textContent = text2;
+          decisionState.textContent = text3;
         };
         const runAction = async (act, okLabel, pendingLabel, failPrefix, okState, pendingState) => {
           if (inFlight) return;
@@ -16134,7 +16437,7 @@ function writeWorkflowSettings(project, workflow, value) {
 var CHECK_WORDS = Object.freeze({ none: "No check", judge: "AI judge", person: "You sign off", step: "A check step" });
 var task = (id, title, dependsOn, extra = {}) => ({ id, title, depends_on: dependsOn, human_gate: false, kind: "task", ...extra });
 var signOff = (id, title, dependsOn) => ({ id, title, depends_on: dependsOn, human_gate: true, kind: "gate" });
-var slug = (text2) => String(text2 ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "workflow";
+var slug = (text3) => String(text3 ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "workflow";
 function uniqueName(base, taken) {
   const names = new Set(taken);
   if (!names.has(base)) return base;
@@ -16217,9 +16520,9 @@ var GENERIC = {
   workSteps: ["plan", "do"]
 };
 function practiceDraft(description, members = []) {
-  const text2 = String(description ?? "").trim();
-  if (!text2) return { error: "Say what the workflow should do first." };
-  const recipe = RECIPES.find((r) => r.match.test(text2)) ?? GENERIC;
+  const text3 = String(description ?? "").trim();
+  if (!text3) return { error: "Say what the workflow should do first." };
+  const recipe = RECIPES.find((r) => r.match.test(text3)) ?? GENERIC;
   const nodes = recipe.nodes();
   const questions = [];
   if (recipe.loopStep) questions.push({ id: "rounds", text: "How many rounds before it asks you?", options: [3, 5, 10].map((n) => ({ label: `${n} rounds`, value: n })), current: loopRounds(nodes.find((n) => n.id === recipe.loopStep)) });
@@ -16249,8 +16552,8 @@ function setSignOff(nodes, wanted, recipe) {
   return [...nodes.map((n) => n.depends_on.some((d) => after.includes(d)) && !n.human_gate && !after.includes(n.id) ? { ...n, depends_on: [gate.id] } : n), { ...gate, depends_on: after }];
 }
 function practiceRevise(nodes, message2, members = []) {
-  const text2 = String(message2 ?? "").trim();
-  const lower = text2.toLowerCase();
+  const text3 = String(message2 ?? "").trim();
+  const lower = text3.toLowerCase();
   const repeating = nodes.find((n) => n.loop) ?? nodes.find((n) => !n.human_gate && n.depends_on.length) ?? nodes.find((n) => !n.human_gate);
   const rounds = lower.match(/(\d+)\s*(times|tries|rounds|attempts|goes)/);
   if (rounds && repeating) {
@@ -16274,7 +16577,7 @@ function practiceRevise(nodes, message2, members = []) {
     const work = nodes.filter((n) => !n.human_gate);
     return { nodes: nodes.map((s) => s.human_gate ? s : { ...s, phase_team: who }), reply: [`Gave ${work.length === 1 ? "the step" : `the ${work.length} work steps`} to ${who}.`], did: [`Gave the work to ${who}`] };
   }
-  const add = text2.match(/^(?:then |and )?(?:add|also)\s+(?:a\s+)?(?:step\s+)?(?:to\s+|that\s+|which\s+)?(.{3,60})$/i);
+  const add = text3.match(/^(?:then |and )?(?:add|also)\s+(?:a\s+)?(?:step\s+)?(?:to\s+|that\s+|which\s+)?(.{3,60})$/i);
   if (add) {
     const last = nodes.filter((n) => !nodes.some((m) => m.depends_on.includes(n.id))).pop();
     const title = add[1].replace(/[.!]+$/, "").replace(/^\w/, (c) => c.toUpperCase());
@@ -16284,7 +16587,7 @@ function practiceRevise(nodes, message2, members = []) {
   return { nodes, reply: ["This practice AI only knows a few requests. Try: 'repeat up to 3 times', 'add a sign-off at the end', 'remove the sign-off', 'give the work to reviewer', 'add a step to tell the team'."], did: [], unknown: true };
 }
 var QUESTION = /^(what|why|how|which|who|when|where|does|do|is|are|explain|describe|tell me about|walk me through|summari[sz]e)\b/i;
-var isQuestion = (text2) => /\?\s*$/.test(String(text2 ?? "").trim()) || QUESTION.test(String(text2 ?? "").trim());
+var isQuestion = (text3) => /\?\s*$/.test(String(text3 ?? "").trim()) || QUESTION.test(String(text3 ?? "").trim());
 function practiceExplain(nodes, title) {
   if (!nodes.length) return { reply: ["It has no steps yet. Say what it should do and I will suggest some."], steps: null, after: [] };
   const gates = nodes.filter((n) => n.human_gate).length;
@@ -16316,8 +16619,8 @@ function withCurrentPositions(next, current) {
 }
 var IMPORT_MAX_BYTES = 262144;
 var isDockyardNode = (n) => n && typeof n === "object" && typeof n.id === "string" && typeof n.title === "string";
-function readImport(text2) {
-  const raw = String(text2 ?? "").trim();
+function readImport(text3) {
+  const raw = String(text3 ?? "").trim();
   if (!raw) return { kind: "invalid", reason: "Paste a workflow, or choose a file, first." };
   if (new TextEncoder().encode(raw).length > IMPORT_MAX_BYTES) return { kind: "invalid", reason: "This file is too big: Project Stewardship imports up to 256 KB." };
   let data = null;
@@ -16361,10 +16664,10 @@ function fromActions(raw) {
 }
 
 // hermes_dockyard_plugin/desktop/src/project/workflow-design/step-settings.js
-var el = (tag, className, text2) => {
+var el = (tag, className, text3) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
-  if (text2 !== void 0) node.textContent = text2;
+  if (text3 !== void 0) node.textContent = text3;
   return node;
 };
 var previewTag = () => el("span", "dy-wfd-preview-tag", "Preview");
@@ -16376,9 +16679,9 @@ var section = (title, { preview = false, help } = {}) => {
   if (help) box.appendChild(el("p", "dy-wfx-help", help));
   return box;
 };
-var labelled = (text2, control) => {
+var labelled = (text3, control) => {
   const label = el("label", "dy-wf-field");
-  label.append(el("span", "", text2), control);
+  label.append(el("span", "", text3), control);
   return label;
 };
 var roundsWords = (n) => `Up to ${n} round${n === 1 ? "" : "s"}, then asks you`;
@@ -18888,13 +19191,13 @@ function NewWorkflowDialog({ project, taken, templates, members, onCreate, onClo
     setWayError(null);
     setBrowsing(false);
   };
-  const check = (text2) => {
-    const result = readImport(text2);
+  const check = (text3) => {
+    const result = readImport(text3);
     setImported(result);
     if (result.kind !== "invalid" && result.name) setName(uniqueName(result.name, takenNames));
   };
-  const draft = (text2) => {
-    const result = practiceDraft(text2, members);
+  const draft = (text3) => {
+    const result = practiceDraft(text3, members);
     if (result.error) {
       setAiError(result.error);
       setAiDraft(null);
@@ -18939,9 +19242,9 @@ function NewWorkflowDialog({ project, taken, templates, members, onCreate, onClo
       ] }),
       jsxs("div", { className: "dy-wfd-row", children: [
         jsxs("label", { className: "dy-wfd-file", children: [jsx("span", { children: "or choose a file" }), jsx("input", { type: "file", accept: ".json,.yaml,.yml,.txt", "data-wfd-import-file": true, onChange: async (e) => {
-          const text2 = await readFileText(e.target.files?.[0]);
-          setImportText(text2);
-          check(text2);
+          const text3 = await readFileText(e.target.files?.[0]);
+          setImportText(text3);
+          check(text3);
         } })] }),
         jsx(Button, { small: true, action: "wfd-import-check", onClick: () => check(importText), children: "Check it" })
       ] }),
@@ -18959,7 +19262,7 @@ function NewWorkflowDialog({ project, taken, templates, members, onCreate, onClo
         jsx("textarea", { rows: 3, value: describe, "data-wfd-ai-describe": true, "aria-invalid": aiError ? "true" : "false", placeholder: "e.g. When a test fails, find the bug, fix it until the tests pass, and ask me before merging.", onChange: (e) => setDescribe(e.target.value) }),
         aiError ? jsx("span", { className: "dy-wfd-error", "data-wfd-ai-error": true, children: aiError }) : null
       ] }),
-      aiDraft ? null : jsx("div", { className: "dy-wfd-chips", role: "group", "aria-label": "Examples", children: AI_EXAMPLES.map((text2) => jsx("button", { type: "button", "data-wfd-ai-example": text2, onClick: () => setDescribe(text2), children: text2 }, text2)) }),
+      aiDraft ? null : jsx("div", { className: "dy-wfd-chips", role: "group", "aria-label": "Examples", children: AI_EXAMPLES.map((text3) => jsx("button", { type: "button", "data-wfd-ai-example": text3, onClick: () => setDescribe(text3), children: text3 }, text3)) }),
       aiDraft ? null : jsx(Button, { action: "wfd-ai-draft", variant: "primary", onClick: () => draft(describe), children: "Draft it" }),
       aiDraft ? jsx(AiPlan, { draft: aiDraft, onAnswer: (id, value) => setAiDraft(answerQuestion(aiDraft, id, value)) }) : null,
       aiDraft ? jsx(Button, { small: true, action: "wfd-ai-redescribe", onClick: () => setAiDraft(null), children: "Change the description" }) : null,
@@ -19038,7 +19341,7 @@ function SuggestionCard({ entry, status, onApply, onNotYet, onUndo }) {
   ] });
 }
 function AiSidebar({ members, nodes, workflowTitle, thread, onThread, pinned, onPin, onApply, onClose, unsaved = false, saveError = null, onSave, onDiscard }) {
-  const [text2, setText] = useState("");
+  const [text3, setText] = useState("");
   const [error, setError] = useState(null);
   const panelRef = useRef(null);
   const listRef = useRef(null);
@@ -19049,9 +19352,9 @@ function AiSidebar({ members, nodes, workflowTitle, thread, onThread, pinned, on
     inputRef.current?.focus();
   }, []);
   useEffect(() => {
-    const list = listRef.current;
-    const last = list?.lastElementChild;
-    if (list && last) list.scrollTop = Math.max(0, last.offsetTop - list.offsetTop - 8);
+    const list2 = listRef.current;
+    const last = list2?.lastElementChild;
+    if (list2 && last) list2.scrollTop = Math.max(0, last.offsetTop - list2.offsetTop - 8);
   }, [thread.length]);
   useEffect(() => {
     const root = panelRef.current?.closest(".dockyard-root");
@@ -19082,7 +19385,7 @@ function AiSidebar({ members, nodes, workflowTitle, thread, onThread, pinned, on
   }, []);
   const empty = !nodes.length;
   const live = [...thread].reverse().find((e) => e.suggestion?.status === "pending" && sameSteps(e.suggestion.base, nodes)) ?? null;
-  const send = (message2 = text2) => {
+  const send = (message2 = text3) => {
     const clean = message2.trim();
     if (!clean) {
       setError("Type what you want first.");
@@ -19161,7 +19464,7 @@ function AiSidebar({ members, nodes, workflowTitle, thread, onThread, pinned, on
       saveError ? jsx("p", { className: "dy-wfd-error", role: "alert", children: saveError }) : null
     ] }) : null,
     jsxs("div", { className: "dy-wfd-ai-compose", children: [
-      jsx("textarea", { ref: inputRef, rows: 2, value: text2, "data-wfd-ai-input": true, "aria-label": "Message to the AI", "aria-invalid": error ? "true" : "false", placeholder: empty ? "e.g. Fix a bug until the tests pass" : "e.g. what does this do? or: repeat up to 3 times", onChange: (e) => setText(e.target.value), onKeyDown: (e) => {
+      jsx("textarea", { ref: inputRef, rows: 2, value: text3, "data-wfd-ai-input": true, "aria-label": "Message to the AI", "aria-invalid": error ? "true" : "false", placeholder: empty ? "e.g. Fix a bug until the tests pass" : "e.g. what does this do? or: repeat up to 3 times", onChange: (e) => setText(e.target.value), onKeyDown: (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           send();
@@ -19245,7 +19548,7 @@ function ExecutableWorkflowsPanel({ project, workflows, onRefresh, onOpenLibrary
   viewRef.current = { definition: { nodes }, runs: mode === "live" ? runs : NO_RUNS };
   const selectedNodeRef = useRef(null);
   const canvasHandle = useRef(null);
-  const canvasNodesOf = (list) => list.map((n) => ({
+  const canvasNodesOf = (list2) => list2.map((n) => ({
     node_id: n.node_id ?? n.id,
     title: n.title ?? n.name ?? n.id,
     depends_on: n.depends_on ?? [],
@@ -19884,8 +20187,8 @@ var MEMORY_MAX_TEXT = 500;
 var kindLabel = (kind) => (MEMORY_KINDS.find(([key]) => key === kind) ?? [kind, kind])[1];
 function memoryMeta(entry) {
   const parts = [`Added by ${entry.created_by}`];
-  const when = formatWhen(entry.created_at);
-  if (when) parts.push(when);
+  const when2 = formatWhen(entry.created_at);
+  if (when2) parts.push(when2);
   if (String(entry.source ?? "").startsWith("work:")) parts.push(`from finished work ${entry.source.slice(5)}`);
   if (entry.supersedes_id != null) parts.push("edited");
   if (entry.archived_at) parts.push(`archived by ${entry.archived_by}`);
@@ -19906,7 +20209,7 @@ function TextBox({ value, onChange, label, field }) {
 }
 function MemoryEntry({ entry, canWrite, busy, onEdit, onArchive, onRestore }) {
   const [editing, setEditing] = useState(false);
-  const [text2, setText] = useState(entry.text);
+  const [text3, setText] = useState(entry.text);
   const [kind, setKind] = useState(entry.kind);
   const [history, setHistory] = useState(null);
   const showHistory = async () => {
@@ -19922,15 +20225,15 @@ function MemoryEntry({ entry, canWrite, busy, onEdit, onArchive, onRestore }) {
     }
   };
   const save2 = async () => {
-    const changed = await onEdit(entry, { text: text2.trim() === entry.text ? void 0 : text2, kind: kind === entry.kind ? void 0 : kind });
+    const changed = await onEdit(entry, { text: text3.trim() === entry.text ? void 0 : text3, kind: kind === entry.kind ? void 0 : kind });
     if (changed) setEditing(false);
   };
   return jsxs("article", { className: "dy-mem-entry", "data-memory-entry": entry.id, "data-memory-entry-kind": entry.kind, "data-archived": entry.archived_at ? "true" : "false", children: [
     editing ? jsxs("div", { className: "dockyard-inline-editor", "data-memory-editor": entry.id, children: [
       jsx(KindSelect, { value: kind, onChange: setKind, label: "Kind" }),
-      jsx(TextBox, { value: text2, onChange: setText, label: "Text", field: "data-memory-edit-text" }),
+      jsx(TextBox, { value: text3, onChange: setText, label: "Text", field: "data-memory-edit-text" }),
       jsxs("div", { className: "dy-mem-actions", children: [
-        jsx(Button, { action: "save-memory-entry", variant: "primary", small: true, disabled: busy || !text2.trim(), onClick: save2, children: "Save" }),
+        jsx(Button, { action: "save-memory-entry", variant: "primary", small: true, disabled: busy || !text3.trim(), onClick: save2, children: "Save" }),
         jsx(Button, { action: "cancel-memory-edit", small: true, onClick: () => {
           setEditing(false);
           setText(entry.text);
@@ -19959,7 +20262,7 @@ function ProjectMemoryPanel({ project }) {
   const [suggestions, setSuggestions] = useState({ status: "loading", items: [] });
   const [showArchived, setShowArchived] = useState(false);
   const [kind, setKind] = useState("rule");
-  const [text2, setText] = useState("");
+  const [text3, setText] = useState("");
   const [source, setSource] = useState("human");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -19997,7 +20300,7 @@ function ProjectMemoryPanel({ project }) {
     }
   };
   const add = async () => {
-    const added = await write(`/projects/${encoded}/memory`, { method: "POST", body: { kind, text: text2, source } }, "Added to the project memory.");
+    const added = await write(`/projects/${encoded}/memory`, { method: "POST", body: { kind, text: text3, source } }, "Added to the project memory.");
     if (added) {
       setText("");
       setSource("human");
@@ -20034,7 +20337,7 @@ function ProjectMemoryPanel({ project }) {
       state.status === "loading" ? jsx("p", { className: "dockyard-meta", children: "Loading memory..." }) : null,
       state.status === "ready" && state.canWrite ? jsxs("div", { className: "dockyard-inline-editor", "data-memory-add": true, children: [
         jsx(KindSelect, { value: kind, onChange: setKind, label: "Kind" }),
-        jsx(TextBox, { value: text2, onChange: setText, label: "Text", field: "data-memory-text" }),
+        jsx(TextBox, { value: text3, onChange: setText, label: "Text", field: "data-memory-text" }),
         source !== "human" ? jsxs("p", { className: "dockyard-meta", "data-memory-source": source, children: [
           `Starting from finished work ${source.slice(5)}. `,
           jsx(Button, { action: "clear-memory-source", small: true, onClick: () => {
@@ -20042,7 +20345,7 @@ function ProjectMemoryPanel({ project }) {
             setText("");
           }, children: "Clear" })
         ] }) : null,
-        jsx("div", { className: "dy-mem-actions", children: jsx(Button, { action: "add-memory-entry", variant: "primary", disabled: busy || !text2.trim(), onClick: add, children: busy ? "Saving..." : "Add to memory" }) })
+        jsx("div", { className: "dy-mem-actions", children: jsx(Button, { action: "add-memory-entry", variant: "primary", disabled: busy || !text3.trim(), onClick: add, children: busy ? "Saving..." : "Add to memory" }) })
       ] }) : null,
       state.status === "ready" && !state.canWrite ? jsx("p", { className: "dockyard-meta", "data-memory-read-only": true, children: "Only the project owner can change the memory." }) : null,
       error ? jsx("p", { className: "dockyard-inline-error", role: "alert", children: error }) : null,
@@ -20500,7 +20803,7 @@ function reportWhen(value, timeZone) {
   const part = (name) => parts.find((entry) => entry.type === name)?.value ?? "";
   return `${part("day")} ${part("month")} ${part("year")}, ${part("hour")}:${part("minute")}`;
 }
-var unescape = (text2) => text2.replace(/\\([|`])/g, "$1");
+var unescape = (text3) => text3.replace(/\\([|`])/g, "$1");
 var FACT = /^([A-Za-z][A-Za-z ()/-]{0,38}): (.+)$/;
 var SEPARATOR = /^\|(\s*:?-{3,}:?\s*\|)+$/;
 var cells = (line) => {
@@ -20552,9 +20855,9 @@ function parseReport(markdown) {
         open = { kind: "list", items: [] };
         doc.blocks.push(open);
       }
-      const text2 = unescape(bullet[1].trim());
-      const fact = FACT.exec(text2);
-      open.items.push(fact ? { text: text2, label: fact[1], value: fact[2] } : { text: text2 });
+      const text3 = unescape(bullet[1].trim());
+      const fact = FACT.exec(text3);
+      open.items.push(fact ? { text: text3, label: fact[1], value: fact[2] } : { text: text3 });
       continue;
     }
     open = null;
@@ -20609,13 +20912,13 @@ function ReportBlock({ block }) {
 }
 function ReportPage({ report, onCopy, onDownload }) {
   const doc = parseReport(report.content);
-  const when = reportWhen(report.generated_at) || doc.generated;
+  const when2 = reportWhen(report.generated_at) || doc.generated;
   const by = report.generated_by || doc.generatedBy;
   return jsxs("div", { className: "dy-rep-doc", "data-report-preview": report.report_id, children: [
     jsxs("header", { className: "dy-rep-doc-head", children: [
       jsxs("div", { children: [
         jsx("h2", { id: "dy-rep-doc-title", children: doc.title || report.title }),
-        jsx("p", { className: "dy-rep-meta", "data-report-meta": true, children: `${reportTypeLabel(report.report_type)} \xB7 Generated ${when}${by ? ` by ${by}` : ""}` })
+        jsx("p", { className: "dy-rep-meta", "data-report-meta": true, children: `${reportTypeLabel(report.report_type)} \xB7 Generated ${when2}${by ? ` by ${by}` : ""}` })
       ] }),
       jsxs("div", { className: "dy-rep-actions", children: [
         jsx(Button, { action: "copy-report", small: true, onClick: onCopy, children: "Copy Markdown" }),
@@ -20742,8 +21045,8 @@ function ProjectReportsPanel({ project, reports, onRefresh }) {
 
 // hermes_dockyard_plugin/desktop/src/kanban/table.js
 function WorkTable({ columns, items, groups, className, emptyText }) {
-  const live = (list) => (list ?? []).filter((item) => item.status !== "archived");
-  const rowsOf = (list) => live(list).map((item) => jsxs("tr", { "data-work-row": item.ref, children: columns.map((column) => jsx("td", { children: column.cell(item) }, column.key)) }, item.ref));
+  const live = (list2) => (list2 ?? []).filter((item) => item.status !== "archived");
+  const rowsOf = (list2) => live(list2).map((item) => jsxs("tr", { "data-work-row": item.ref, children: columns.map((column) => jsx("td", { children: column.cell(item) }, column.key)) }, item.ref));
   const total = groups ? groups.reduce((sum, group) => sum + live(group.items).length, 0) : (items ?? []).length;
   if (total === 0) return jsx("p", { className: "dockyard-meta", "data-work-table-empty": true, children: emptyText ?? "No work items match this saved view." });
   return jsxs("table", { className: ["dockyard-backlog-table", className].filter(Boolean).join(" "), "data-work-table": true, children: [
@@ -20818,8 +21121,8 @@ var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oc
 function shortDate(iso, today) {
   const [year, month, day2] = String(iso ?? "").slice(0, 10).split("-").map(Number);
   if (!year || !month || !day2) return String(iso ?? "");
-  const text2 = `${day2} ${MONTHS[month - 1]}`;
-  return today && String(today).slice(0, 4) === String(year) ? text2 : `${text2} ${year}`;
+  const text3 = `${day2} ${MONTHS[month - 1]}`;
+  return today && String(today).slice(0, 4) === String(year) ? text3 : `${text3} ${year}`;
 }
 function objectivesOfInitiative(roadmapProject, initiativeRef) {
   const initiative = (roadmapProject?.initiatives ?? []).find((candidate) => candidate.ref === initiativeRef);
@@ -20866,12 +21169,12 @@ var CARD_FIELD_LABELS = Object.freeze({
 var defaultFields = () => ({ assignee: true, links: true, due: true, labels: true, planning: false });
 var DENSITIES = Object.freeze(["compact", "detailed"]);
 var LABEL_LIMIT = 2;
-function cardSignals(facts, fields, today) {
+function cardSignals(facts2, fields, today) {
   const out = [];
-  if (fields.links && facts.openBlockers > 0) out.push({ kind: "blocked_by", icon: "hand", text: `Blocked by ${facts.openBlockers}` });
-  if (fields.links && facts.openBlocks > 0) out.push({ kind: "blocks", icon: "link", text: `Blocks ${facts.openBlocks}` });
-  if (fields.due && facts.due) {
-    out.push(facts.overdue ? { kind: "overdue", icon: "clock-3", text: `Overdue \xB7 ${shortDate(facts.due, today)}` } : { kind: "due", icon: "calendar", text: `Due ${shortDate(facts.due, today)}` });
+  if (fields.links && facts2.openBlockers > 0) out.push({ kind: "blocked_by", icon: "hand", text: `Blocked by ${facts2.openBlockers}` });
+  if (fields.links && facts2.openBlocks > 0) out.push({ kind: "blocks", icon: "link", text: `Blocks ${facts2.openBlocks}` });
+  if (fields.due && facts2.due) {
+    out.push(facts2.overdue ? { kind: "overdue", icon: "clock-3", text: `Overdue \xB7 ${shortDate(facts2.due, today)}` } : { kind: "due", icon: "calendar", text: `Due ${shortDate(facts2.due, today)}` });
   }
   return out;
 }
@@ -20895,8 +21198,8 @@ function applyFilters(items, filters, factsByRef = {}) {
     if (filters.statuses.length && !filters.statuses.includes(item.status)) return false;
     if (!query) return true;
     if (String(item.ref).toLowerCase().includes(query) || String(item.title ?? "").toLowerCase().includes(query)) return true;
-    const facts = factsByRef[item.ref];
-    return [...facts?.blockedBy ?? [], ...facts?.blocks ?? []].some((card) => String(card.ref).toLowerCase().includes(query));
+    const facts2 = factsByRef[item.ref];
+    return [...facts2?.blockedBy ?? [], ...facts2?.blocks ?? []].some((card) => String(card.ref).toLowerCase().includes(query));
   });
 }
 var ALL_WORK = "All work";
@@ -20976,7 +21279,7 @@ function Avatar({ name }) {
   const initials3 = initialsOf(name);
   return jsx("span", { className: initials3 ? "dy-kb-avatar" : "dy-kb-avatar empty", title: name ? displayName(name) : "Unassigned", "aria-hidden": true, children: initials3 });
 }
-function CardBody({ id, item, facts, moves, moving, today, onMove, onOpenItem, onOpenRef, onNavigate }) {
+function CardBody({ id, item, facts: facts2, moves, moving, today, onMove, onOpenItem, onOpenRef, onNavigate }) {
   const linkRow = (card) => jsx("li", { children: jsxs("button", {
     type: "button",
     className: "dy-kb-link",
@@ -20992,23 +21295,23 @@ function CardBody({ id, item, facts, moves, moving, today, onMove, onOpenItem, o
   }) }, card.ref);
   const section3 = (key, title, body) => jsxs("section", { className: "dy-kb-section", "data-card-section": key, children: [jsx("h5", { children: title }), body] }, key);
   const row = (label, value, extra = {}, key = label) => jsxs("div", { className: "dy-kb-row", ...extra, children: [jsx("dt", { children: label }), jsx("dd", { children: value })] }, key);
-  const goto = (label, onClick, text2) => jsx("button", { type: "button", className: "dy-kb-goto", "aria-label": `${label}: ${text2}`, onClick, children: text2 });
+  const goto = (label, onClick, text3) => jsx("button", { type: "button", className: "dy-kb-goto", "aria-label": `${label}: ${text3}`, onClick, children: text3 });
   const planning = [];
-  if (facts.initiative) planning.push(row("Initiative", goto("Initiative", () => onNavigate(`plan:initiative:${facts.initiative.ref}`), facts.initiative.title || facts.initiative.ref)));
-  facts.milestones.forEach((milestone, index) => planning.push(row("Milestone", goto("Milestone", () => onNavigate(`plan:milestone:${milestone.id}`), milestone.due ? `${milestone.name} \xB7 due ${shortDate(milestone.due, today)}` : milestone.name), {}, `milestone:${index}`)));
-  if (facts.goal) {
+  if (facts2.initiative) planning.push(row("Initiative", goto("Initiative", () => onNavigate(`plan:initiative:${facts2.initiative.ref}`), facts2.initiative.title || facts2.initiative.ref)));
+  facts2.milestones.forEach((milestone, index) => planning.push(row("Milestone", goto("Milestone", () => onNavigate(`plan:milestone:${milestone.id}`), milestone.due ? `${milestone.name} \xB7 due ${shortDate(milestone.due, today)}` : milestone.name), {}, `milestone:${index}`)));
+  if (facts2.goal) {
     planning.push(row("Goal", jsxs("span", { children: [
-      goto("Goal", () => onNavigate(`plan:goal:${facts.goal.id}`), facts.goal.title)
+      goto("Goal", () => onNavigate(`plan:goal:${facts2.goal.id}`), facts2.goal.title)
     ] })));
   } else {
     planning.push(row("Goal", jsx("span", { className: "dy-kb-via", children: "Not placed yet" })));
   }
   const details = [row("Assignee", item.assignee ? displayName(item.assignee) : "Unassigned")];
-  if (facts.due) details.push(row("Due", facts.overdue ? `${shortDate(facts.due, today)} \xB7 Overdue` : shortDate(facts.due, today), facts.overdue ? { "data-overdue": "true" } : {}));
-  if (facts.labels.length) details.push(row("Labels", facts.labels.join(", ")));
+  if (facts2.due) details.push(row("Due", facts2.overdue ? `${shortDate(facts2.due, today)} \xB7 Overdue` : shortDate(facts2.due, today), facts2.overdue ? { "data-overdue": "true" } : {}));
+  if (facts2.labels.length) details.push(row("Labels", facts2.labels.join(", ")));
   return jsxs("div", { className: "dy-kb-card-body", id, "data-card-body": item.ref, children: [
-    facts.blockedBy.length ? section3("blocked_by", "Blocked by", jsx("ul", { className: "dy-kb-links", children: facts.blockedBy.map(linkRow) })) : null,
-    facts.blocks.length ? section3("blocks", "Blocks", jsx("ul", { className: "dy-kb-links", children: facts.blocks.map(linkRow) })) : null,
+    facts2.blockedBy.length ? section3("blocked_by", "Blocked by", jsx("ul", { className: "dy-kb-links", children: facts2.blockedBy.map(linkRow) })) : null,
+    facts2.blocks.length ? section3("blocks", "Blocks", jsx("ul", { className: "dy-kb-links", children: facts2.blocks.map(linkRow) })) : null,
     planning.length ? section3("planning", "Planning", jsx("dl", { children: planning })) : null,
     section3("details", "Details", jsx("dl", { children: details })),
     jsxs("div", { className: "dy-kb-card-actions", children: [
@@ -21020,12 +21323,12 @@ function CardBody({ id, item, facts, moves, moving, today, onMove, onOpenItem, o
     ] })
   ] });
 }
-function Card({ item, facts, fields, open, moves, moving, today, onToggle, onDragStart, onDragEnd, ...bodyProps }) {
-  const signals = cardSignals(facts, fields, today);
-  const labels = fields.labels ? facts.labels : [];
+function Card({ item, facts: facts2, fields, open, moves, moving, today, onToggle, onDragStart, onDragEnd, ...bodyProps }) {
+  const signals = cardSignals(facts2, fields, today);
+  const labels = fields.labels ? facts2.labels : [];
   const shownLabels = labels.slice(0, LABEL_LIMIT);
   const hiddenLabels = labels.slice(LABEL_LIMIT);
-  const planningText = fields.planning ? [facts.initiative ? facts.initiative.title || facts.initiative.ref : null, facts.milestones[0]?.name].filter(Boolean).join(" \xB7 ") : "";
+  const planningText = fields.planning ? [facts2.initiative ? facts2.initiative.title || facts2.initiative.ref : null, facts2.milestones[0]?.name].filter(Boolean).join(" \xB7 ") : "";
   const bodyId = domId("dy-kb-body", item.ref);
   const summaryId = domId("dy-kb-sum", item.ref);
   const hasSummary = signals.length > 0 || shownLabels.length > 0 || Boolean(planningText);
@@ -21063,7 +21366,7 @@ function Card({ item, facts, fields, open, moves, moving, today, onToggle, onDra
           ] }) : null
         ]
       }),
-      open ? jsx(CardBody, { id: bodyId, item, facts, moves, moving, today, ...bodyProps }) : null
+      open ? jsx(CardBody, { id: bodyId, item, facts: facts2, moves, moving, today, ...bodyProps }) : null
     ]
   });
 }
@@ -21117,9 +21420,9 @@ function ViewsPanel({
   const trimmed = newName.trim();
   const newProblem = !trimmed ? "Give the view a name." : names.includes(trimmed) ? `A view called "${trimmed}" already exists.` : null;
   const renameProblem = (from) => {
-    const text2 = renameText.trim();
-    if (!text2) return "Give the view a name.";
-    if (text2 !== from && names.includes(text2)) return `A view called "${text2}" already exists.`;
+    const text3 = renameText.trim();
+    if (!text3) return "Give the view a name.";
+    if (text3 !== from && names.includes(text3)) return `A view called "${text3}" already exists.`;
     return null;
   };
   const newForm = newOpen ? jsxs("form", {
@@ -21365,10 +21668,10 @@ function KanbanScreen({ project, view, onRefresh, setWorkNotice, onOpenItem, onN
     }
   };
   const putView = (name, definition, shared) => api(`/projects/${encoded}/views`, { method: "PUT", body: viewBody(name, definition, shared) });
-  const upsertLocal = (name, definition, shared) => setViewList((list2) => {
+  const upsertLocal = (name, definition, shared) => setViewList((list3) => {
     const body2 = viewBody(name, definition, shared);
-    const entry = { ...list2.find((saved) => saved.name === name) ?? { mine: true }, name, layout: body2.layout, filters: body2.filters, shared: body2.shared };
-    return list2.some((saved) => saved.name === name) ? list2.map((saved) => saved.name === name ? entry : saved) : [...list2, entry];
+    const entry = { ...list3.find((saved) => saved.name === name) ?? { mine: true }, name, layout: body2.layout, filters: body2.filters, shared: body2.shared };
+    return list3.some((saved) => saved.name === name) ? list3.map((saved) => saved.name === name ? entry : saved) : [...list3, entry];
   });
   const runView = async (label, work) => {
     setBusy(true);
@@ -21406,7 +21709,7 @@ function KanbanScreen({ project, view, onRefresh, setWorkNotice, onOpenItem, onN
     } catch (failure) {
       throw new Error(`saved as "${name}", but the old view could not be removed (${String(failure?.message ?? failure)})`);
     }
-    setViewList((list2) => list2.filter((candidate) => candidate.name !== saved.name));
+    setViewList((list3) => list3.filter((candidate) => candidate.name !== saved.name));
     updateHeld((base) => {
       const drafts = { ...base.drafts };
       if (drafts[saved.name]) {
@@ -21430,7 +21733,7 @@ function KanbanScreen({ project, view, onRefresh, setWorkNotice, onOpenItem, onN
   });
   const deleteView = (saved) => runView(`Could not delete "${saved.name}"`, async () => {
     await api(`/projects/${encoded}/views/${encodeURIComponent(saved.name)}`, { method: "DELETE" });
-    setViewList((list2) => list2.filter((candidate) => candidate.name !== saved.name));
+    setViewList((list3) => list3.filter((candidate) => candidate.name !== saved.name));
     updateHeld((base) => {
       const drafts = { ...base.drafts };
       delete drafts[saved.name];
@@ -21466,7 +21769,7 @@ function KanbanScreen({ project, view, onRefresh, setWorkNotice, onOpenItem, onN
     ] })
   ] });
   const { filters } = working;
-  const segmented = (label, key, value, choices, onPick) => jsx("div", { className: "dy-kb-segmented", role: "group", "aria-label": label, children: choices.map(([choice, text2]) => jsx("button", { type: "button", [`data-kanban-${key}`]: choice, "aria-pressed": value === choice, onClick: () => onPick(choice), children: text2 }, choice)) });
+  const segmented = (label, key, value, choices, onPick) => jsx("div", { className: "dy-kb-segmented", role: "group", "aria-label": label, children: choices.map(([choice, text3]) => jsx("button", { type: "button", [`data-kanban-${key}`]: choice, "aria-pressed": value === choice, onClick: () => onPick(choice), children: text3 }, choice)) });
   const toolbar = jsxs("div", { className: "dy-kb-toolbar", "data-kanban-toolbar": true, children: [
     jsxs("label", { className: "dy-kb-control dy-kb-search", children: [
       jsx(Icon, { name: "search" }),
@@ -21606,28 +21909,28 @@ function KanbanScreen({ project, view, onRefresh, setWorkNotice, onOpenItem, onN
       ...moves.targets.map((target) => jsx("option", { value: target.status, children: target.label }, target.key))
     ] }) : jsx("span", { className: "dy-kb-panel-meta", title: moves.reason ?? "", children: "\u2014" });
   };
-  const facts = (item) => factsByRef[item.ref];
+  const facts2 = (item) => factsByRef[item.ref];
   const listColumns = [
     { key: "ref", heading: "Ref", cell: (item) => jsx("button", { type: "button", className: "dy-kb-goto", onClick: () => onOpenItem(item), children: item.ref }) },
     { key: "title", heading: "Title", cell: (item) => item.title },
     { key: "type", heading: "Type", cell: (item) => typeLabel(item.type) },
     { key: "status", heading: "State", cell: (item) => statusText(item.status) },
     { key: "assignee", heading: "Assignee", cell: (item) => item.assignee ? displayName(item.assignee) : "Unassigned" },
-    { key: "blocked_by", heading: "Blocked by", cell: (item) => refsCell(facts(item).blockedBy) },
-    { key: "blocks", heading: "Blocks", cell: (item) => refsCell(facts(item).blocks) },
-    { key: "initiative", heading: "Initiative", cell: (item) => facts(item).initiative ? facts(item).initiative.title || facts(item).initiative.ref : "" },
-    { key: "milestone", heading: "Milestone", cell: (item) => facts(item).milestones.map((milestone) => milestone.name).join(", ") },
-    { key: "goal", heading: "Goal", cell: (item) => facts(item).goal ? facts(item).goal.title : "" },
-    { key: "due", heading: "Due", cell: (item) => facts(item).due ? `${shortDate(facts(item).due, today)}${facts(item).overdue ? " \xB7 Overdue" : ""}` : "" },
+    { key: "blocked_by", heading: "Blocked by", cell: (item) => refsCell(facts2(item).blockedBy) },
+    { key: "blocks", heading: "Blocks", cell: (item) => refsCell(facts2(item).blocks) },
+    { key: "initiative", heading: "Initiative", cell: (item) => facts2(item).initiative ? facts2(item).initiative.title || facts2(item).initiative.ref : "" },
+    { key: "milestone", heading: "Milestone", cell: (item) => facts2(item).milestones.map((milestone) => milestone.name).join(", ") },
+    { key: "goal", heading: "Goal", cell: (item) => facts2(item).goal ? facts2(item).goal.title : "" },
+    { key: "due", heading: "Due", cell: (item) => facts2(item).due ? `${shortDate(facts2(item).due, today)}${facts2(item).overdue ? " \xB7 Overdue" : ""}` : "" },
     { key: "move", heading: "Move", cell: moveCell }
   ];
-  const list = jsx("div", { className: "dy-kb-list", children: jsx(WorkTable, {
+  const list2 = jsx("div", { className: "dy-kb-list", children: jsx(WorkTable, {
     columns: listColumns,
     className: "dy-kb-table",
     groups: STAGES.map((stage) => ({ key: stage.key, label: stage.label, items: grouped[stage.key] })).filter((group) => group.items.length > 0),
     emptyText: "No work items to list."
   }) }, "list");
-  const body = [jsxs("div", { className: "dy-kb-controls", children: [toolbar, editedStrip, help] }, "controls"), ...notes, empty, working.layout === "list" ? list : board];
+  const body = [jsxs("div", { className: "dy-kb-controls", children: [toolbar, editedStrip, help] }, "controls"), ...notes, empty, working.layout === "list" ? list2 : board];
   return jsxs("div", { className: "dockyard-board-wrap", "data-kanban-screen": true, "data-view": currentName ?? ALL_WORK, "data-panel-open": panel ? "true" : void 0, children: [
     viewsBar,
     ...body,
@@ -21914,7 +22217,7 @@ function planActions(projectId) {
     linkGoal: (goalId, objectiveId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: Number(objectiveId) } }),
     unlinkGoal: (goalId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
     unplaceGoal: (goalId) => api(`/projects/${p}/goals/${enc2(goalId)}/objective`, { method: "PUT", quiet, body: { parent_id: null } }),
-    saveMission: (text2) => api(`/projects/${p}/settings`, { method: "PATCH", quiet, body: { mission: text2.trim() } }),
+    saveMission: (text3) => api(`/projects/${p}/settings`, { method: "PATCH", quiet, body: { mission: text3.trim() } }),
     archiveMission: () => api(`/projects/${p}/mission/archive`, { method: "POST", quiet, body: {} }),
     removeMission: () => api(`/projects/${p}/mission`, { method: "DELETE", quiet, body: {} }),
     freeze: () => api(`/projects/${p}/freeze`, { method: "POST", quiet, body: {} })
@@ -22547,10 +22850,10 @@ function PlanDrawer({ item, plan, actions, ui, onClose, onChanged }) {
         item.delivery.blocked > 0 ? jsxs("span", { className: "blocked", children: [jsx("strong", { children: number(item.delivery.blocked) }), "Blocked"] }, "blocked") : null
       ] }) }, "delivery"),
       jsx("p", { className: "dy-plan-note", "data-plan-no-delete": true, children: WITHDRAWABLE_STATUSES.includes(item.status) ? "Initiatives are not deleted: each keeps its approval record. Not needed any more? Withdraw it before approval." : "Initiatives are not deleted: each keeps its approval record." }, "nodelete"),
-      jsx(Section2, { title: "Stages", children: jsx("ol", { className: "dy-plan-loop", "data-plan-loop": item.ref, children: LOOP.map(([key, label, text2], index) => jsxs("li", {
+      jsx(Section2, { title: "Stages", children: jsx("ol", { className: "dy-plan-loop", "data-plan-loop": item.ref, children: LOOP.map(([key, label, text3], index) => jsxs("li", {
         className: index < stage ? "done" : index === stage ? stopped ? "stopped" : "current" : "",
         "aria-current": index === stage ? "step" : void 0,
-        children: [jsx("strong", { children: label }), index === stage ? jsx("small", { children: stopped ?? text2(item) }) : null]
+        children: [jsx("strong", { children: label }), index === stage ? jsx("small", { children: stopped ?? text3(item) }) : null]
       }, key)) }) }, "loop")
     ];
     footer = [
@@ -23015,7 +23318,7 @@ import { host } from "@hermes/plugin-sdk";
 
 // hermes_dockyard_plugin/desktop/src/project/chat.js
 function chatTargets(members, lead) {
-  const list = Array.isArray(members) ? members : [];
+  const list2 = Array.isArray(members) ? members : [];
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   const push = (slug2, role) => {
@@ -23024,9 +23327,9 @@ function chatTargets(members, lead) {
     seen.add(profile);
     out.push({ profile, role });
   };
-  const leadSlug = String(lead ?? "").trim() || list.find((member) => member?.role === "lead")?.profile_slug;
+  const leadSlug = String(lead ?? "").trim() || list2.find((member) => member?.role === "lead")?.profile_slug;
   if (leadSlug) push(leadSlug, "lead");
-  for (const member of list) {
+  for (const member of list2) {
     if (member?.state === "departed") continue;
     push(member?.profile_slug, member?.role === "lead" ? "lead" : "member");
   }
@@ -23034,8 +23337,8 @@ function chatTargets(members, lead) {
 }
 function chatRoute(routes, activeConnectionId, profile) {
   if (!activeConnectionId) return null;
-  const list = (Array.isArray(routes) ? routes : []).filter((route) => route?.connectionId === activeConnectionId);
-  return list.find((route) => route?.targetProfile === profile) ?? list.find((route) => route?.profile === profile) ?? null;
+  const list2 = (Array.isArray(routes) ? routes : []).filter((route) => route?.connectionId === activeConnectionId);
+  return list2.find((route) => route?.targetProfile === profile) ?? list2.find((route) => route?.profile === profile) ?? null;
 }
 async function openProjectChat({ host: host4, api: api2, projectId, profile }) {
   if (typeof host4?.newChat !== "function") return { opened: false, reason: "unsupported" };
@@ -23350,7 +23653,7 @@ function AttentionDrawer({ projectId, attention, onClose, onOpenItem }) {
         jsx("p", { className: "dy-ov-attn-sub", children: sub }),
         items.length > 0 ? jsx("ul", { className: "dy-ov-attn-list", children: items.map((item, index) => {
           const open = expanded === item.key;
-          const facts = [
+          const facts2 = [
             ["Owner", item.owner],
             ["Waiting", ageText(item.ageDays)],
             ["Next step", item.next]
@@ -23369,7 +23672,7 @@ function AttentionDrawer({ projectId, attention, onClose, onOpenItem }) {
               ]
             }),
             open ? jsxs("div", { className: "dy-ov-attn-detail", id: `dy-ov-attn-detail-${index}`, children: [
-              facts.length > 0 ? jsx("dl", { children: facts.flatMap(([term, value]) => [
+              facts2.length > 0 ? jsx("dl", { children: facts2.flatMap(([term, value]) => [
                 jsx("dt", { children: term }, `${term}-t`),
                 jsx("dd", { children: value }, `${term}-d`)
               ]) }) : null,
@@ -23503,7 +23806,7 @@ var KNOWN_EVENT_TYPES = Object.freeze([
   "work.assigned",
   "work.unassigned"
 ]);
-var text = (value) => typeof value === "string" ? value.trim() : "";
+var text2 = (value) => typeof value === "string" ? value.trim() : "";
 var sentence2 = (value) => {
   const words2 = String(value ?? "").replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
   return words2 ? words2[0].toUpperCase() + words2.slice(1) : "";
@@ -23512,13 +23815,13 @@ var plural5 = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 var effect = (label, tone) => ({ label, tone });
 var healthWord = (state) => HEALTH_WORD[state] ?? sentence2(state);
 var contradictions = (payload) => Array.isArray(payload.contradictions) ? payload.contradictions : [];
-var firstDetail = (list) => text(list.find((entry) => text(entry?.detail))?.detail);
+var firstDetail = (list2) => text2(list2.find((entry) => text2(entry?.detail))?.detail);
 function describeInitiative(type, spec, ref, payload, ctx) {
   const initiative = ref ? (ctx.initiatives ?? []).find((entry) => entry?.ref === ref) : null;
-  const name = text(payload.title) || text(initiative?.title);
+  const name = text2(payload.title) || text2(initiative?.title);
   let note = "";
-  if (spec.note === "risk") note = text(payload.risk) ? `${sentence2(payload.risk)} risk` : "";
-  else if (spec.note) note = text(payload[spec.note]);
+  if (spec.note === "risk") note = text2(payload.risk) ? `${sentence2(payload.risk)} risk` : "";
+  else if (spec.note) note = text2(payload[spec.note]);
   const pending = initiative?.status === "pending_approval";
   return {
     kind: "initiatives",
@@ -23535,8 +23838,8 @@ function describeInitiative(type, spec, ref, payload, ctx) {
   };
 }
 function describeHealth(payload) {
-  const from = text(payload.from);
-  const to = text(payload.to);
+  const from = text2(payload.from);
+  const to = text2(payload.to);
   const score = payload.score === null || payload.score === void 0 || payload.score === "" ? NaN : Number(payload.score);
   let change = effect("Health changed", "neutral");
   if (to && !from) change = effect("First reading", "neutral");
@@ -23559,7 +23862,7 @@ function describeHealth(payload) {
 }
 function describeWork(type, ref, payload, ctx) {
   const item = ref ? (ctx.workItems ?? []).find((entry) => entry?.ref === ref) : null;
-  const name = text(payload.title) || text(item?.title);
+  const name = text2(payload.title) || text2(item?.title);
   const assigned = type === "work.assigned";
   return {
     kind: "work",
@@ -23567,7 +23870,7 @@ function describeWork(type, ref, payload, ctx) {
     ref: ref || null,
     label: assigned ? "Work assigned" : "Work unassigned",
     title: ref ? name ? `${ref} \xB7 ${name}` : ref : name,
-    note: assigned && text(payload.to) ? `Assigned to ${text(payload.to)}` : "",
+    note: assigned && text2(payload.to) ? `Assigned to ${text2(payload.to)}` : "",
     // Unassigned: the app's own words ("no bot will pick it up", Sahil 04/10).
     // Assigned: the owner may be a person, so only say it has one.
     effect: assigned ? effect("Has an owner", "success") : effect("No bot will pick it up", "warning"),
@@ -23580,24 +23883,24 @@ function describeType(type, subject, payload, ctx) {
   if (type === "project.health.changed") return describeHealth(payload);
   if (type === "work.assigned" || type === "work.unassigned") return describeWork(type, subject, payload, ctx);
   if (type === "project.critical") {
-    const list = contradictions(payload);
+    const list2 = contradictions(payload);
     return {
       kind: "health",
       icon: "triangle-alert",
       label: "Project critical",
       title: "Health is critical",
-      note: [list.length > 0 ? plural5(list.length, "contradiction") : "", payload.auto_freeze === true ? "Changes are frozen automatically" : ""].filter(Boolean).join(" \xB7 "),
+      note: [list2.length > 0 ? plural5(list2.length, "contradiction") : "", payload.auto_freeze === true ? "Changes are frozen automatically" : ""].filter(Boolean).join(" \xB7 "),
       effect: effect("Critical", "danger")
     };
   }
   if (type === "stewardship.verification.failed") {
-    const list = contradictions(payload);
+    const list2 = contradictions(payload);
     return {
       kind: "health",
       icon: "shield-alert",
       label: "Verification failed",
-      title: list.length > 0 ? `${plural5(list.length, "contradiction")} found` : "The evidence did not check out",
-      note: firstDetail(list),
+      title: list2.length > 0 ? `${plural5(list2.length, "contradiction")} found` : "The evidence did not check out",
+      note: firstDetail(list2),
       effect: effect("Evidence disagrees", "warning")
     };
   }
@@ -23607,12 +23910,12 @@ function describeType(type, subject, payload, ctx) {
       icon: "triangle-alert",
       label: "Proposal step failed",
       title: "The proposal step stopped with an error",
-      note: text(payload.error).slice(0, 160),
+      note: text2(payload.error).slice(0, 160),
       effect: effect("No proposals made", "warning")
     };
   }
   if (type === CHECK) {
-    const trigger = text(payload.trigger_type);
+    const trigger = text2(payload.trigger_type);
     return {
       kind: "health",
       icon: "rotate-cw",
@@ -23623,7 +23926,7 @@ function describeType(type, subject, payload, ctx) {
     };
   }
   if (type === "cycle.mutations_blocked") {
-    return { kind: "health", icon: "shield-alert", label: "Changes blocked", title: text(payload.reason), note: "", effect: effect("Nothing was changed", "neutral") };
+    return { kind: "health", icon: "shield-alert", label: "Changes blocked", title: text2(payload.reason), note: "", effect: effect("Nothing was changed", "neutral") };
   }
   return { kind: "other", icon: "history", label: sentence2(type) || "Project event", title: subject, note: "", effect: null };
 }
@@ -23632,7 +23935,7 @@ function describeEvent(event, ctx = {}) {
   const raw = event?.payload;
   const payload = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const subject = event?.subject === null || event?.subject === void 0 ? "" : String(event.subject);
-  const actor = text(payload.actor) || (text(event?.emitted_by) && event.emitted_by !== "system" ? text(event.emitted_by) : "");
+  const actor = text2(payload.actor) || (text2(event?.emitted_by) && event.emitted_by !== "system" ? text2(event.emitted_by) : "");
   const at = Date.parse(event?.ts ?? "");
   const row = {
     ref: null,
@@ -23693,8 +23996,8 @@ function groupByDay(rows, { now = /* @__PURE__ */ new Date(), timeZone } = {}) {
     }
     groups.get(key).rows.push(row);
   }
-  const list = [...groups.values()];
-  return [...list.filter((group) => group.key !== "unknown"), ...list.filter((group) => group.key === "unknown")];
+  const list2 = [...groups.values()];
+  return [...list2.filter((group) => group.key !== "unknown"), ...list2.filter((group) => group.key === "unknown")];
 }
 function matchesFilter(row, { kind = "all", query = "" } = {}) {
   if (kind !== "all" && row.kind !== kind) return false;
@@ -23758,7 +24061,7 @@ function ProjectActivityPanel({ project, view, onOpenItem }) {
   );
   const shown = rows.filter((row) => matchesFilter(row, { kind, query }));
   const groups = groupByDay(shown);
-  const eventCount = (list) => list.reduce((sum, row) => sum + row.count, 0);
+  const eventCount = (list2) => list2.reduce((sum, row) => sum + row.count, 0);
   const next = STEPS.find((step) => step > limit);
   const full = events.length >= limit;
   const filtered = kind !== "all" || query.trim() !== "";
@@ -24771,7 +25074,7 @@ var KIND_LABELS = {
   alert: "Alerts",
   unassigned_work: "Unassigned"
 };
-var STATE_LABELS = { new: "New", seen: "Seen", resolved: "Resolved" };
+var STATE_LABELS2 = { new: "New", seen: "Seen", resolved: "Resolved" };
 var PAGE_SIZE = 50;
 var kindLabel2 = (kind) => KIND_LABELS[kind] ?? "Other";
 function dayBucket(createdAt) {
@@ -24893,7 +25196,7 @@ function NotificationsView({ view, scopeProjectId = null, onRefresh, onAcknowled
         jsx("label", { className: "dy-notif-filter", children: jsx("select", { "aria-label": "Filter by state", value: stateFilter, onChange: (e) => {
           setStateFilter(e.target.value);
           setVisible(PAGE_SIZE);
-        }, children: ["all", "new", "seen", "resolved"].map((value) => jsx("option", { value, children: value === "all" ? "All states" : STATE_LABELS[value] }, value)) }) }),
+        }, children: ["all", "new", "seen", "resolved"].map((value) => jsx("option", { value, children: value === "all" ? "All states" : STATE_LABELS2[value] }, value)) }) }),
         jsx("label", { className: "dy-notif-filter", children: jsx("select", { "aria-label": "Filter by type", value: typeFilter, onChange: (e) => {
           setTypeFilter(e.target.value);
           setVisible(PAGE_SIZE);
@@ -24955,7 +25258,7 @@ function NotificationsView({ view, scopeProjectId = null, onRefresh, onAcknowled
 function NotificationRow({ note, busy, selected, onSelect, onSeen, onOpen }) {
   const tone = severityTone(note.severity);
   const state = note.state ?? (note.acked ? "seen" : "new");
-  const when = formatWhen(note.created_at);
+  const when2 = formatWhen(note.created_at);
   return jsxs("article", {
     className: "dockyard-notification-row",
     "data-notification-id": String(note.id),
@@ -24972,10 +25275,10 @@ function NotificationRow({ note, busy, selected, onSelect, onSeen, onOpen }) {
           jsxs("span", { children: [
             jsxs("span", { className: "dy-notif-row-titleline", children: [
               jsx("strong", { children: note.title ?? "Fleet notification" }),
-              jsx(StatusTag, { tone: state === "new" ? "info" : "neutral", label: STATE_LABELS[state] ?? state })
+              jsx(StatusTag, { tone: state === "new" ? "info" : "neutral", label: STATE_LABELS2[state] ?? state })
             ] }),
             jsx("p", { children: note.body ?? "" }),
-            jsx("span", { className: "dockyard-meta", children: `${note.project || "Fleet"} \xB7 ${kindLabel2(note.kind)} \xB7 ${note.severity}${when ? ` \xB7 ${when}` : ""}` })
+            jsx("span", { className: "dockyard-meta", children: `${note.project || "Fleet"} \xB7 ${kindLabel2(note.kind)} \xB7 ${note.severity}${when2 ? ` \xB7 ${when2}` : ""}` })
           ] })
         ] })
       }),
@@ -24991,7 +25294,7 @@ function NotificationDetail({ note, busy, resolveOpen, onResolveToggle, resolveN
   const resolvedBy = note.resolved_by;
   const seenBy = note.acked_by;
   return jsxs("aside", { className: "dy-notif-detail", "data-notification-detail": String(note.id), "aria-label": "Notification detail", children: [
-    jsxs("h3", { children: [note.title ?? "Fleet notification", " ", jsx(StatusTag, { tone: state === "new" ? "info" : "neutral", label: STATE_LABELS[state] ?? state })] }),
+    jsxs("h3", { children: [note.title ?? "Fleet notification", " ", jsx(StatusTag, { tone: state === "new" ? "info" : "neutral", label: STATE_LABELS2[state] ?? state })] }),
     jsx("p", { children: note.body ?? "" }),
     jsx("span", { className: "dockyard-meta", children: `Project: ${note.project || "Fleet"}` }),
     jsx("span", { className: "dockyard-meta", children: `Type: ${kindLabel2(note.kind)} \xB7 Severity: ${note.severity}` }),
@@ -25472,7 +25775,7 @@ var STATE_LABEL = {
   waived: "No longer required"
 };
 var words = (value) => String(value ?? "").replace(/_/g, " ");
-var chip = (text2, tone = "") => jsx("span", { className: `dy-rm-chip${tone ? ` ${tone}` : ""}`, children: text2 });
+var chip = (text3, tone = "") => jsx("span", { className: `dy-rm-chip${tone ? ` ${tone}` : ""}`, children: text3 });
 var waivedChip = (row) => row.waived ? chip(`No longer required \u2014 ${row.waived.reason}`, "waived") : null;
 var milestoneStateWords = (row) => `${STATE_LABEL[row.state] ?? words(row.state)}${row.overdue ? " \xB7 overdue" : ""}${row.closed ? " \xB7 closed" : ""}`;
 var objectiveStateWords = (row) => {
@@ -25697,17 +26000,17 @@ function contractFacts(entry, goalTitle) {
   if (!entry || entry.loading) return [["Goal contract", "Loading\u2026"]];
   if (entry.error) return [["Goal contract", `Unavailable: ${entry.error}`]];
   const contract = entry.contract;
-  const text2 = (value) => value === null || value === void 0 || String(value).trim() === "" ? "\u2014" : String(value);
+  const text3 = (value) => value === null || value === void 0 || String(value).trim() === "" ? "\u2014" : String(value);
   const outcome = String(contract.outcome ?? "").trim();
   const copied = outcome !== "" && outcome === String(goalTitle ?? "").trim();
   return [
-    ["Outcome", copied ? jsxs(Fragment, { children: [contract.outcome, jsx("small", { className: "dy-rm-copied", children: "Copied from the goal title" })] }) : text2(contract.outcome)],
+    ["Outcome", copied ? jsxs(Fragment, { children: [contract.outcome, jsx("small", { className: "dy-rm-copied", children: "Copied from the goal title" })] }) : text3(contract.outcome)],
     ["Contract status", CONTRACT_STATUS[contract.status] ?? words(contract.status)],
-    ...contract.status === "paused" ? [["Paused because", text2(contract.paused_reason)]] : [],
-    ["Verification", text2(contract.verification)],
-    ["Constraints", text2(contract.constraints)],
-    ["Boundaries", text2(contract.boundaries)],
-    ["Stop when", text2(contract.stop_when)],
+    ...contract.status === "paused" ? [["Paused because", text3(contract.paused_reason)]] : [],
+    ["Verification", text3(contract.verification)],
+    ["Constraints", text3(contract.constraints)],
+    ["Boundaries", text3(contract.boundaries)],
+    ["Stop when", text3(contract.stop_when)],
     ...contract.max_turns !== null && contract.max_turns !== void 0 ? [["Turn limit", number(contract.max_turns)]] : []
   ];
 }
@@ -26654,7 +26957,7 @@ function DashboardPage({ inboxCss = "" } = {}) {
   };
   const [deepLinkNotice, setDeepLinkNotice] = useState(null);
   const [inboxFocusRef, setInboxFocusRef] = useState(null);
-  const openDeepLink = (link) => {
+  const openDeepLink = (link, context) => {
     if (typeof link !== "string" || !link.includes(":")) return;
     const [screen, rest] = link.split(":", 2);
     const slash = rest.indexOf("/");
@@ -26668,9 +26971,10 @@ function DashboardPage({ inboxCss = "" } = {}) {
     }
     if (screen === "s2" && objectKind === "work" && objectId) {
       const known = Object.entries(data?.payload?.projectContext ?? {});
-      const ownerProject = known.find(([, context]) => (context.workItems ?? []).some((item) => item.ref === objectId));
-      setDeepLinkNotice(ownerProject ? null : `Work item ${objectId} is not in the current board data.`);
-      setSelectedProject(ownerProject ? ownerProject[0] : selectedProject ?? data?.payload?.projects?.[0]?.id ?? null);
+      const ownerProject = known.find(([, context2]) => (context2.workItems ?? []).some((item) => item.ref === objectId));
+      const targetProject = projectOptions.some((project) => project.id === context?.projectId) ? context.projectId : ownerProject?.[0];
+      setDeepLinkNotice(targetProject ? null : `Work item ${objectId} is not in the current board data.`);
+      setSelectedProject(targetProject ?? selectedProject ?? data?.payload?.projects?.[0]?.id ?? null);
       setProjectEntryView("overview");
       setTab("project");
       setPendingWorkRef(objectId);
@@ -26733,6 +27037,14 @@ function DashboardPage({ inboxCss = "" } = {}) {
   } else if (tab === "dashboard") {
     content = jsxs(Fragment, { children: [
       scopeNote(scoped?.hidden ?? 0, "items that need you"),
+      jsx(FleetControlCenter, {
+        projects: projectOptions,
+        selectedProject,
+        refreshedAt: data.refreshedAt,
+        onOpen: openDeepLink,
+        onSettings: (project) => requestTab("project", { project, entryView: "settings" }),
+        onApprovals: (project) => requestTab("inbox", { project })
+      }),
       jsx(DashboardView, { view: scoped?.view ?? payload, onInbox: () => setTab("inbox"), onRefresh: refresh, onOpen: openDeepLink, resetView: dashboardHomeVersion }, "dashboard")
     ] });
   } else if (tab === "project") {
@@ -26886,12 +27198,12 @@ function openDockyard() {
   host3?.navigate?.("/dockyard");
 }
 function surfacePopup(item) {
-  const text2 = String(item?.body ?? "").trim();
+  const text3 = String(item?.body ?? "").trim();
   host3.notify({
     id: `dockyard-notification-${item?.id}`,
     kind: "info",
     title: item?.title ?? "Fleet notification",
-    message: text2 || "Open Project Stewardship to review it.",
+    message: text3 || "Open Project Stewardship to review it.",
     action: { label: "Open Project Stewardship", onClick: openDockyard }
   });
 }
