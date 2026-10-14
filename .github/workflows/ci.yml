@@ -94,6 +94,6 @@ jobs:
           DOCKYARD_CAPTURE_SCREENSHOTS: "0"
         run: node --experimental-vm-modules --test repro-live.test.mjs milestone-chain.test.mjs
       - name: Test fleet web dashboard bundle
-        run: node --test hermes_dockyard_plugin/fleet_web/
+        run: node --test hermes_dockyard_plugin/fleet_web/*.test.mjs
       - name: Test fleet control center in both hosts
         run: node --experimental-vm-modules --test hermes_dockyard_plugin/desktop/fleet-control-center.test.mjs hermes_dockyard_plugin/desktop/fleet-control-center-browser.test.mjs
