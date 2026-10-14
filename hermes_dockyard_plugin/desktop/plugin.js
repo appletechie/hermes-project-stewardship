@@ -7687,6 +7687,32 @@ function refreshControlCenter(view, now = Date.now()) {
 var enc = encodeURIComponent;
 var message = (failure) => String(failure?.message ?? failure);
 var read = (path) => path ? api(path).then((data) => ({ data }), (failure) => ({ error: message(failure) })) : {};
+var controlReadQueue = [];
+var activeControlReads = 0;
+function drainControlReads() {
+  while (activeControlReads < 4 && controlReadQueue.length) {
+    const { projectId, isCurrent, resolve } = controlReadQueue.shift();
+    if (!isCurrent()) {
+      resolve(null);
+      continue;
+    }
+    activeControlReads++;
+    read(`/control-center?project_id=${enc(projectId)}`).then((response) => {
+      activeControlReads--;
+      resolve(response);
+      drainControlReads();
+    });
+  }
+}
+async function readControlProjects(projectIds, isCurrent) {
+  const reads = projectIds.map((projectId) => new Promise((resolve) => {
+    controlReadQueue.push({ projectId, isCurrent, resolve });
+  }));
+  drainControlReads();
+  const responses = await Promise.all(reads);
+  if (!isCurrent()) return [];
+  return responses.map((response, index) => response.error ? { mode: "unavailable", project_id: projectIds[index], error: response.error } : controlCenterView(response.data, projectIds[index]));
+}
 async function fleetRead(main, extra) {
   const health = await api("/health").catch(() => null);
   if (health?.fleet !== true) return { mode: "vanilla" };
@@ -7850,10 +7876,7 @@ function FleetControlCenter({ projects, selectedProject, refreshedAt, onOpen, on
         setState({ ...result, scope });
         return;
       }
-      const views = await Promise.all(scope.split(",").map(async (projectId) => {
-        const response = await read(`/control-center?project_id=${enc(projectId)}`);
-        return response.error ? { mode: "unavailable", project_id: projectId, error: response.error } : controlCenterView(response.data, projectId);
-      }));
+      const views = await readControlProjects(scope.split(","), () => current);
       if (current) setState({ mode: "fleet", scope, views });
     });
     return () => {
