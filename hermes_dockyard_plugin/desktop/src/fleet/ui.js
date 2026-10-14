@@ -179,10 +179,10 @@ export function ControlCenterProject({ view, onOpen, onSettings, onApprovals }) 
   const blocked = registry?.items.filter((item) => item.state === 'blocked').length ?? 0
   const stale = registry?.items.filter((item) => item.freshness === 'stale').length ?? 0
   const teamSummary = registry?.state === 'unavailable' ? 'Team evidence unavailable' : `${registry?.items.length ?? 0} team entries (${blocked} blocked, ${stale} stale)`
-  const workSummary = view.sources?.dispatch === 'unavailable' ? 'Native work unavailable' : `${view.work?.length ?? 0} active work`
+  const workSummary = view.sources?.dispatch === 'unavailable' ? 'Stewardship initiatives unavailable' : `${view.work?.length ?? 0} active initiatives`
   return jsxs('details', { className: 'dy-control-project', 'data-control-project': view.project_id, children: [
     jsx('summary', { children: view.mode === 'fleet'
-      ? `${view.project_id} · ${teamSummary} · ${workSummary} · Registry ${registry.state} · Native work ${view.sources.dispatch}${view.sources.needs_you !== 'current' ? ` · Needs you ${view.sources.needs_you}` : ''}`
+      ? `${view.project_id} · ${teamSummary} · ${workSummary} · Registry ${registry.state} · Initiatives ${view.sources.dispatch}${view.sources.needs_you !== 'current' ? ` · Needs you ${view.sources.needs_you}` : ''}`
       : `${view.project_id} · Control center unavailable` }),
     jsxs('div', { className: 'dy-control-head', children: [
       jsx('strong', { children: view.project_id }),
@@ -193,15 +193,15 @@ export function ControlCenterProject({ view, onOpen, onSettings, onApprovals }) 
       ] }),
     ] }),
     view.mode !== 'fleet' ? jsx('p', { className: 'dockyard-inline-error', role: 'status', children: `Control center unavailable: ${view.error}` }) : jsxs(Fragment, { children: [
-      jsx('p', { className: 'dockyard-meta', children: `Observed ${when(view.observed_at)} · Native work ${view.sources.dispatch} · Needs you ${view.sources.needs_you}${view.sources.needs_you === 'current' ? ` (${view.needs_you.length})` : ''}` }),
+      jsx('p', { className: 'dockyard-meta', children: `Observed ${when(view.observed_at)} · Initiatives ${view.sources.dispatch} · Needs you ${view.sources.needs_you}${view.sources.needs_you === 'current' ? ` (${view.needs_you.length})` : ''}` }),
       jsx('h3', { children: 'Team and connections' }),
       jsx('p', { className: 'dockyard-meta', children: `Capability registry ${registry.state}${registry.reason ? ` · ${readable(registry.reason)}` : ''} · Observed ${when(registry.observed_at)}` }),
       registry.items.length ? jsx(ControlRows, { items: registry.items, noun: 'team members', render: (item) => jsx(ControlPrincipal, { item }, item.principal_id) })
         : jsx('p', { role: 'status', children: registry.state === 'unavailable' ? 'Capability evidence is unavailable. Connection readiness is unknown.' : 'No capability observations recorded for this project.' }),
-      jsx('h3', { children: 'Active work' }),
-      view.sources.dispatch !== 'current' ? jsx('p', { className: 'dockyard-inline-error', role: 'status', children: `Native work source ${view.sources.dispatch}; this list may be incomplete.` }) : null,
-      view.work.length ? jsx(ControlRows, { items: view.work, noun: 'work items', render: (item) => jsx(ControlWork, { item, projectId: view.project_id, onOpen }, item.work_id) })
-        : jsx('p', { className: 'dockyard-meta', children: view.sources.dispatch === 'current' ? 'No active initiatives reported.' : 'Active work cannot be confirmed.' }),
+      jsx('h3', { children: 'Stewardship initiatives' }),
+      view.sources.dispatch !== 'current' ? jsx('p', { className: 'dockyard-inline-error', role: 'status', children: `Stewardship initiative source ${view.sources.dispatch}; this list may be incomplete.` }) : null,
+      view.work.length ? jsx(ControlRows, { items: view.work, noun: 'initiatives', render: (item) => jsx(ControlWork, { item, projectId: view.project_id, onOpen }, item.work_id) })
+        : jsx('p', { className: 'dockyard-meta', children: view.sources.dispatch === 'current' ? 'No active Stewardship initiatives reported for this project.' : 'Active Stewardship initiatives cannot be confirmed.' }),
       view.truncated.length ? jsx('p', { className: 'dockyard-meta', children: `Limited snapshot: ${view.truncated.map(readable).join(', ')}. Open the project for the full view.` }) : null,
     ] }),
   ] })
@@ -241,7 +241,7 @@ export function FleetControlCenter({ projects, selectedProject, refreshedAt, onO
       jsx('h2', { children: 'Connected team and work' }),
       jsx(Button, { small: true, disabled: loading, action: 'refresh-control-center', onClick: () => setRevision((value) => value + 1), children: 'Refresh connections' }),
     ] }),
-    jsx('p', { className: 'dockyard-meta', children: 'Project owners, connection evidence and active work. Configured capabilities still require a successful test.' }),
+    jsx('p', { className: 'dockyard-meta', children: 'Project owners, connection evidence and active Stewardship initiatives. Native cards appear here when linked to an initiative. Configured capabilities still require a successful test.' }),
     loading ? jsx('p', { role: 'status', children: 'Reading project connections…' }) : state.views?.map((view) => jsx(ControlCenterProject, { view, onOpen, onSettings, onApprovals }, view.project_id)),
   ] })
 }
