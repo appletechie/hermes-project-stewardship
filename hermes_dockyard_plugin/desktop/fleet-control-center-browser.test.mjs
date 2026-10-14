@@ -24,6 +24,85 @@ const hostHtml = (web) => `<!doctype html><html style="--background-base:#fff;--
   </style></head><body><div id="host"><aside id="sidebar" aria-label="Host sidebar"></aside><main id="content"><div id="root"></div></main></div>
   ${web ? '<script src="/control-bootstrap.js"></script><script src="/control-web.js"></script>' : '<script type="module" src="/bundle.js"></script>'}</body></html>`
 
+test('control-center requests stay bounded across scope changes and remounts in both hosts', { timeout: 60000 }, async () => {
+  await fixtureBrowser(async (page, base) => {
+    const projects = Array.from({ length: 12 }, (_, index) => `project-${String(index).padStart(2, '0')}`)
+    const pending = []
+    let automatic = false
+    await page.addInitScript(() => {
+      const original = window.fetch
+      window.controlReads = { projects: [], active: 0, maximum: 0 }
+      window.fetch = async (...args) => {
+        const url = new URL(args[0], location.href)
+        if (!url.pathname.endsWith('/control-center')) return original(...args)
+        const reads = window.controlReads
+        reads.projects.push(url.searchParams.get('project_id'))
+        reads.maximum = Math.max(reads.maximum, ++reads.active)
+        try { return await original(...args) } finally { reads.active-- }
+      }
+    })
+    await page.route('**/control-bootstrap.js', (route) => route.fulfill({ contentType: 'text/javascript', body: bootstrap }))
+    await page.route('**/control-web.js', (route) => route.fulfill({ contentType: 'text/javascript', body: webBundle }))
+    await page.route('**/control-desktop', (route) => route.fulfill({ contentType: 'text/html', body: hostHtml(false) }))
+    await page.route('**/control-web', (route) => route.fulfill({ contentType: 'text/html', body: hostHtml(true) }))
+    await page.route('**/api/**', async (route) => {
+      const url = new URL(route.request().url())
+      const path = url.pathname.replace(/^\/api(?:\/plugins\/hermes-project-stewardship)?/, '')
+      const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) })
+      if (path === '/health') return json({ fleet: true })
+      if (path === '/settings/last-project') return json({ project_id: null })
+      if (path === '/dashboard' || path === '/portfolio') return json({ projects: projects.map((id) => ({
+        id, enabled: true, health: 'healthy', work: { backlog: 0, active: 0, done: 0, blocked: 0 }, unacked_notifications: 0,
+      })), totals: {} })
+      if (path === '/control-center') {
+        const project = url.searchParams.get('project_id')
+        if (!automatic) await new Promise((resolve) => pending.push({ project, resolve }))
+        return project === projects[6] ? json({ detail: 'Fixture unavailable' }, 503) : json(controlFixture(project))
+      }
+      if (url.pathname.startsWith('/api/plugins/')) return route.fulfill({ response: await route.fetch({ url: `${base}/api${path}${url.search}` }) })
+      return route.continue()
+    })
+    const waitForReads = (count) => page.waitForFunction((count) => window.controlReads.projects.length >= count, count)
+    const settle = () => page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
+    for (const variant of ['desktop', 'web']) {
+      automatic = false
+      pending.length = 0
+      await page.goto(`${base}/control-${variant}`)
+      const panel = page.locator('[data-fleet-control-center]')
+      await waitForReads(4)
+      await settle()
+      assert.deepEqual(await page.evaluate(() => window.controlReads), { projects: projects.slice(0, 4), active: 4, maximum: 4 }, variant)
+      pending.splice(2, 1)[0].resolve()
+      await waitForReads(5)
+      await pickProject(page, projects[9])
+      await pickProject(page, projects[8])
+      await page.locator('[data-tab="inbox"]').click()
+      await panel.waitFor({ state: 'detached' })
+      await page.locator('[data-tab="dashboard"]').click()
+      await panel.getByText('Reading project connections…').waitFor()
+      await settle()
+      assert.equal(await page.evaluate(() => window.controlReads.projects.length), 5, 'old in-flight requests retain their slots across scope changes and remounts')
+      pending.shift().resolve()
+      await waitForReads(6)
+      assert.equal(await page.evaluate(() => window.controlReads.projects.at(-1)), projects[8], 'only the latest scope enters the released slot')
+      pending.splice(pending.findIndex((entry) => entry.project === projects[8]), 1)[0].resolve()
+      await panel.locator(`[data-control-project="${projects[8]}"]`).waitFor()
+      pending.splice(0).reverse().forEach((entry) => entry.resolve())
+      await page.waitForFunction(() => window.controlReads.active === 0)
+      await settle()
+      assert.deepEqual(await page.evaluate(() => window.controlReads.projects), [...projects.slice(0, 5), projects[8]], 'cancelled scopes never dispatch their queued projects')
+      assert.deepEqual(await panel.locator('[data-control-project]').evaluateAll((items) => items.map((item) => item.dataset.controlProject)), [projects[8]], 'late responses cannot replace the current scope')
+      automatic = true
+      await pickProject(page, '*')
+      await panel.locator(`[data-control-project="${projects.at(-1)}"]`).waitFor()
+      assert.deepEqual(await panel.locator('[data-control-project]').evaluateAll((items) => items.map((item) => item.dataset.controlProject)), projects, 'results keep project order and retain independent failures')
+      assert.match(await panel.locator(`[data-control-project="${projects[6]}"] > summary`).innerText(), /Control center unavailable/)
+      assert.deepEqual(await page.evaluate(() => window.controlReads.projects.slice(6)), projects)
+      assert.equal(await page.evaluate(() => window.controlReads.maximum), 4, variant)
+    }
+  })
+})
+
 test('Desktop and web control center: scope, text, links, failures, controls and responsive host layout', { timeout: 180000 }, async () => {
   await fixtureBrowser(async (page, base) => {
     const errors = []

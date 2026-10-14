@@ -17,6 +17,36 @@ const message = (failure) => String(failure?.message ?? failure)
 
 const read = (path) => (path ? api(path).then((data) => ({ data }), (failure) => ({ error: message(failure) })) : {})
 
+// The host REST seam cannot abort an active request. Keep its slot occupied
+// across scope changes and remounts, and stop stale workers before dispatch.
+const controlReadQueue = []
+let activeControlReads = 0
+
+function drainControlReads() {
+  while (activeControlReads < 4 && controlReadQueue.length) {
+    const { projectId, isCurrent, resolve } = controlReadQueue.shift()
+    if (!isCurrent()) { resolve(null); continue }
+    activeControlReads++
+    read(`/control-center?project_id=${enc(projectId)}`).then((response) => {
+      activeControlReads--
+      resolve(response)
+      drainControlReads()
+    })
+  }
+}
+
+async function readControlProjects(projectIds, isCurrent) {
+  const reads = projectIds.map((projectId) => new Promise((resolve) => {
+    controlReadQueue.push({ projectId, isCurrent, resolve })
+  }))
+  drainControlReads()
+  const responses = await Promise.all(reads)
+  if (!isCurrent()) return []
+  return responses.map((response, index) => response.error
+    ? { mode: 'unavailable', project_id: projectIds[index], error: response.error }
+    : controlCenterView(response.data, projectIds[index]))
+}
+
 // GET /health answers on every backend and only the hermes-fleet wrapper adds
 // `fleet: true`, so a vanilla backend is never asked for a route it lacks. A
 // failed /health reads as vanilla: the fleet backend itself refuses what
@@ -189,10 +219,7 @@ export function FleetControlCenter({ projects, selectedProject, refreshedAt, onO
     fleetRead().then(async (result) => {
       if (!current) return
       if (result.mode !== 'fleet') { setState({ ...result, scope }); return }
-      const views = await Promise.all(scope.split(',').map(async (projectId) => {
-        const response = await read(`/control-center?project_id=${enc(projectId)}`)
-        return response.error ? { mode: 'unavailable', project_id: projectId, error: response.error } : controlCenterView(response.data, projectId)
-      }))
+      const views = await readControlProjects(scope.split(','), () => current)
       if (current) setState({ mode: 'fleet', scope, views })
     })
     return () => { current = false }
